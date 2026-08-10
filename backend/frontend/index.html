@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>NEMO Deficiencies</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260810-version-export">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">ND</span>
+        <div class="brand-text">
+          <strong>NEMO Deficiencies</strong>
+          <span id="appVersion" class="connection-state">v-</span>
+          <span id="connectionState" class="connection-state">lokal</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <label class="compact-field language-field" for="uiLanguageSelect">
+          <span>Sprache</span>
+          <select id="uiLanguageSelect">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <span id="aiConnectionState" class="connection-state">KI nicht eingerichtet</span>
+        <select id="aiProfileSelect" class="ai-profile-select" aria-label="Aktive KI auswählen" title="Aktive KI auswählen" hidden></select>
+        <button id="aiConfigBtn" class="button secondary" type="button">KI-Zugang</button>
+        <button id="ruleTemplateCatalogBtn" class="button secondary expert-only" type="button">Regelkatalog</button>
+        <div class="mode-switch segmented" role="group" aria-label="Bedienmodus">
+          <button id="standardModeBtn" type="button" aria-pressed="true">Standard</button>
+          <button id="expertModeBtn" type="button" aria-pressed="false">Experte</button>
+        </div>
+        <label class="compact-field expert-only" for="themeSelect">
+          <span>Schema</span>
+          <select id="themeSelect">
+            <option value="system">System</option>
+            <option value="light">Hell</option>
+            <option value="dark">Dunkel</option>
+          </select>
+        </label>
+        <a id="cliWizardLink" class="button secondary" href="/cli-wizard">CLI-Wizard</a>
+        <a class="button secondary expert-only" href="/docs" target="_blank" rel="noreferrer">API</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="sidebar" aria-label="Reportauswahl">
+        <div class="sidebar-rail expert-only">
+          <button id="sidebarToggleBtn" class="sidebar-toggle" type="button" aria-label="Linke Spalte einklappen" aria-expanded="true" title="Linke Spalte einklappen">
+            <span class="sidebar-toggle-icon" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="sidebar-content">
+          <div class="control-band">
+            <label class="field" for="configSelect">
+              <span>Konfiguration</span>
+              <span class="config-select-row">
+                <select id="configSelect"></select>
+                <button id="configStatisticsBtn" class="button secondary config-statistics-button" type="button" title="Statistik erstellen">Statistik</button>
+                <button id="editConfigBtn" class="icon-button config-edit-button" type="button" aria-label="Ausgewählte Konfiguration bearbeiten" title="Ausgewählte Konfiguration bearbeiten">✎</button>
+                <button id="addConfigBtn" class="icon-button config-add-button" type="button" aria-label="Konfiguration anlegen" title="Konfiguration anlegen">+</button>
+              </span>
+            </label>
+
+            <div class="field expert-only">
+              <span>Projekt</span>
+              <div id="projectTabs" class="segmented" role="group" aria-label="Projekt"></div>
+            </div>
+
+            <label class="field" for="searchInput">
+              <span>Suche</span>
+              <input id="searchInput" type="search" autocomplete="off" placeholder="Reportname">
+            </label>
+
+            <div class="list-tools">
+              <span id="reportCount" class="count">0 Reports</span>
+              <button id="refreshBtn" class="button secondary" type="button">Aktualisieren</button>
+            </div>
+          </div>
+
+          <div id="reportList" class="report-list" role="listbox" aria-label="Reports"></div>
+        </div>
+      </aside>
+
+      <section class="detail-pane" aria-label="Reportdetails">
+        <div class="detail-header">
+          <div class="title-block">
+            <p id="projectLabel" class="eyebrow">Master Data</p>
+            <h1 id="reportTitle">Report</h1>
+            <p id="reportMeta" class="meta-line">-</p>
+          </div>
+          <div class="run-controls expert-only">
+            <label class="compact-field" for="maxRowsInput">
+              <span>Zeilen</span>
+              <input id="maxRowsInput" type="number" min="1" max="1000" value="100">
+            </label>
+            <button id="runBtn" class="button primary" type="button" disabled>Ergebnis laden</button>
+          </div>
+        </div>
+
+        <div class="metric-row expert-only" aria-label="Reportmetriken">
+          <div class="metric">
+            <span>Spalten</span>
+            <strong id="columnsMetric">-</strong>
+          </div>
+          <div class="metric">
+            <span>SQL</span>
+            <strong id="sqlMetric">-</strong>
+          </div>
+          <div class="metric">
+            <span>Zeilen</span>
+            <strong id="rowsMetric">-</strong>
+          </div>
+          <div class="metric">
+            <span>Status</span>
+            <strong id="statusMetric">bereit</strong>
+          </div>
+        </div>
+
+        <div class="view-tabs expert-only" role="tablist" aria-label="Ansicht">
+          <button id="editorViewBtn" class="active" type="button" role="tab" aria-selected="true">Editor</button>
+          <button id="resultViewBtn" type="button" role="tab" aria-selected="false">Ergebnis</button>
+          <button id="harmonizationViewBtn" type="button" role="tab" aria-selected="false">Harmonisierung</button>
+        </div>
+
+        <div id="resultView" class="view-panel expert-only" hidden>
+          <div class="result-band">
+            <div class="result-title">
+              <h2>Ergebnis</h2>
+              <span id="previewInfo" class="meta-line">-</span>
+            </div>
+            <div class="table-wrap">
+              <table id="previewTable">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+              <div id="emptyPreview" class="empty-state">Kein Ergebnis geladen</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="editorView" class="view-panel">
+          <div class="editor-band">
+            <div class="result-title">
+              <h2 class="expert-only">Editor-Modell</h2>
+              <span id="editorInfo" class="meta-line expert-only">-</span>
+              <button id="loadEditorBtn" class="button secondary expert-only" type="button" disabled>Modell laden</button>
+              <button id="validateEditorBtn" class="button secondary expert-only" type="button" disabled>Validieren</button>
+              <label class="compact-field report-language-field" for="reportLanguageSelect">
+                <span>Berichtssprache</span>
+                <select id="reportLanguageSelect">
+                  <option value="de">Deutsch</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <button id="renderSqlBtn" class="button secondary" type="button" disabled>SQL-Vorschau</button>
+              <button id="exportSqlBtn" class="button secondary expert-only" type="button" disabled>SQL exportieren</button>
+              <button id="writeNemoBtn" class="button secondary danger" type="button" disabled>In NEMO speichern</button>
+              <button id="resetEditorBtn" class="button secondary expert-only" type="button" disabled>Zurücksetzen</button>
+              <button id="saveDraftBtn" class="button primary expert-only" type="button" disabled>Draft speichern</button>
+              <button id="deleteDraftBtn" class="button secondary expert-only" type="button" disabled>Draft verwerfen</button>
+            </div>
+
+            <div class="metric-row editor-metrics expert-only" aria-label="Editor-Metriken">
+              <div class="metric">
+                <span>Blöcke</span>
+                <strong id="blocksMetric">-</strong>
+              </div>
+              <div class="metric">
+                <span>Gruppen</span>
+                <strong id="groupsMetric">-</strong>
+              </div>
+              <div class="metric">
+                <span>Regeln</span>
+                <strong id="rulesMetric">-</strong>
+              </div>
+              <div class="metric">
+                <span>Hinweise</span>
+                <strong id="findingsMetric">-</strong>
+              </div>
+            </div>
+
+            <div id="editorGrid" class="editor-grid">
+              <section class="model-section expert-only" aria-label="SQL-Blöcke">
+                <div class="section-head">
+                  <h3>Blöcke</h3>
+                </div>
+                <div id="blockList" class="block-list"></div>
+              </section>
+
+              <section class="model-section rules-section" aria-label="Blockinhalt">
+                <div class="section-head section-head-actions">
+                  <h3 id="contextPanelTitle">Datenqualitätsregeln</h3>
+                  <div id="contextPanelActions" class="section-button-row">
+                    <button id="addGroupBtn" class="button secondary compact-button" type="button" disabled>+ Regelgruppe</button>
+                    <button id="addRuleBtn" class="button secondary compact-button" type="button" disabled>+ Regel</button>
+                    <button id="groupToggleBtn" class="button secondary compact-button" type="button" disabled>Alle aufklappen</button>
+                  </div>
+                </div>
+                <div id="groupList" class="group-list"></div>
+              </section>
+
+              <section id="detailPanel" class="model-section rule-parameter-section" aria-label="Kontextdetails">
+                <div class="section-head">
+                  <h3 id="detailPanelTitle">Regelparameter</h3>
+                </div>
+                <div id="parameterDetail" class="parameter-detail-content">
+                  <div id="ruleDetail" class="rule-detail"></div>
+                  <div class="change-log-panel expert-only">
+                    <div class="section-head section-head-actions">
+                      <h3>Änderungsverlauf</h3>
+                      <div class="section-button-row">
+                        <button id="undoChangeBtn" class="button secondary compact-button" type="button" disabled>Rückgängig</button>
+                        <button id="restoreOriginalBtn" class="button secondary compact-button" type="button" disabled>Ursprungsbericht wiederherstellen</button>
+                      </div>
+                    </div>
+                    <span id="changeLogInfo" class="meta-line">Noch keine Änderungen</span>
+                    <div id="changeLogList" class="change-log-list"></div>
+                  </div>
+                  <div id="validationList" class="validation-list side-validation" hidden></div>
+                </div>
+                <div id="sqlPreviewPanel" class="sql-preview-panel" hidden>
+                  <span id="sqlPreviewInfo" class="meta-line sql-preview-info">Noch nicht generiert</span>
+                  <pre id="sqlPreview" class="sql-preview">Keine SQL-Vorschau</pre>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div id="harmonizationView" class="view-panel expert-only" hidden>
+          <div class="harmonization-band">
+            <div class="result-title harmonization-toolbar">
+              <div>
+                <h2>Harmonisierung</h2>
+                <span id="harmonizationInfo" class="meta-line">Noch nicht geladen</span>
+              </div>
+              <label class="compact-field harmonization-search" for="harmonizationSearchInput">
+                <span>Feld suchen</span>
+                <input id="harmonizationSearchInput" type="search" autocomplete="off" placeholder="Displayname oder Beschreibung">
+              </label>
+              <button id="refreshHarmonizationBtn" class="button secondary" type="button">Aktualisieren</button>
+            </div>
+
+            <div class="metric-row harmonization-metrics" aria-label="Harmonisierungsmetriken">
+              <div class="metric"><span>Berichte</span><strong id="harmonizationReportsMetric">-</strong></div>
+              <div class="metric"><span>Felder</span><strong id="harmonizationFieldsMetric">-</strong></div>
+              <div class="metric"><span>Abweichungen</span><strong id="harmonizationDivergentMetric">-</strong></div>
+              <div class="metric"><span>Fehlende Zuordnungen</span><strong id="harmonizationMissingMetric">-</strong></div>
+            </div>
+
+            <div class="harmonization-grid">
+              <section class="harmonization-matrix-panel" aria-label="Harmonisierungs-Matrix">
+                <div class="harmonization-table-wrap">
+                  <table id="harmonizationMatrix" class="harmonization-matrix">
+                    <thead></thead>
+                    <tbody></tbody>
+                  </table>
+                  <div id="emptyHarmonization" class="empty-state">Noch keine Harmonisierungsdaten geladen</div>
+                </div>
+              </section>
+              <aside class="harmonization-detail" aria-label="Harmonisierungsdetails">
+                <div class="section-head"><h3>Felddetails</h3></div>
+                <div id="harmonizationDetail" class="harmonization-detail-content">
+                  <div class="empty-state">Feld oder Berichtszelle auswählen</div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="configDialog" class="config-dialog" aria-labelledby="configDialogTitle">
+    <form id="configForm" method="dialog">
+      <div class="dialog-head">
+        <h2 id="configDialogTitle">Konfiguration anlegen</h2>
+        <button id="closeConfigDialogBtn" class="icon-button" type="button" aria-label="Dialog schließen" title="Dialog schließen">×</button>
+      </div>
+      <div class="dialog-fields">
+        <label class="field" for="configNameInput">
+          <span>Name</span>
+          <input id="configNameInput" name="name" type="text" autocomplete="off" required maxlength="120" placeholder="config_tenant">
+        </label>
+        <label class="field" for="configTenantInput">
+          <span>Tenant</span>
+          <input id="configTenantInput" name="tenant" type="text" autocomplete="organization" required maxlength="120">
+        </label>
+        <label class="field" for="configUserIdInput">
+          <span>User-ID</span>
+          <input id="configUserIdInput" name="userid" type="text" autocomplete="username" required maxlength="240">
+        </label>
+        <label class="field" for="configPasswordInput">
+          <span>Passwort</span>
+          <input id="configPasswordInput" name="password" type="password" autocomplete="new-password" required maxlength="1024">
+          <small id="configPasswordHint" class="field-hint">Wird verschlüsselt gespeichert</small>
+        </label>
+        <label class="field" for="configNemoUrlInput">
+          <span>NEMO-URL</span>
+          <input id="configNemoUrlInput" name="nemoUrl" type="url" required maxlength="500" value="https://enter.nemo-ai.com">
+        </label>
+        <label class="field" for="configEnvironmentInput">
+          <span>Environment</span>
+          <input id="configEnvironmentInput" name="environment" type="text" required maxlength="120" value="prod" pattern="[A-Za-z0-9._-]+">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button id="deleteConfigBtn" class="button danger dialog-delete-action" type="button" hidden>Löschen</button>
+        <button id="cancelConfigBtn" class="button secondary" type="button">Abbrechen</button>
+        <button id="saveConfigBtn" class="button primary" type="submit">Neu anlegen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="configStatisticsDialog" class="config-dialog statistics-dialog" aria-labelledby="configStatisticsTitle">
+    <form method="dialog">
+      <div class="dialog-head">
+        <div>
+          <h2 id="configStatisticsTitle">Konfigurationsstatistik</h2>
+          <span id="configStatisticsInfo" class="meta-line">Noch nicht erstellt</span>
+        </div>
+        <button id="closeConfigStatisticsBtn" class="icon-button" type="button" aria-label="Dialog schließen" title="Dialog schließen">×</button>
+      </div>
+      <div id="configStatisticsLoading" class="statistics-loading" hidden>
+        <span class="report-spinner" aria-hidden="true"></span>
+        <span>Berichte werden analysiert</span>
+      </div>
+      <div id="configStatisticsContent" class="statistics-content" hidden>
+        <div class="statistics-metrics" aria-label="Konfigurationsmetriken">
+          <div class="metric"><span>Berichte</span><strong id="statisticsReportsMetric">0</strong></div>
+          <div class="metric"><span>Regelgruppen</span><strong id="statisticsGroupsMetric">0</strong><small id="statisticsFieldsMetric">0 unterschiedliche Felder</small></div>
+          <div class="metric"><span>Regeln</span><strong id="statisticsRulesMetric">0</strong></div>
+          <div class="metric active"><span>Aktiv</span><strong id="statisticsActiveMetric">0</strong></div>
+          <div class="metric inactive"><span>Inaktiv</span><strong id="statisticsInactiveMetric">0</strong></div>
+        </div>
+        <section class="statistics-chart" aria-labelledby="statisticsChartTitle">
+          <div class="statistics-chart-head">
+            <h3 id="statisticsChartTitle">Regelstatus</h3>
+            <span id="statisticsActiveRate" class="meta-line">0 % aktiv</span>
+          </div>
+          <div class="statistics-status-bar" role="img" aria-label="Verteilung aktiver und inaktiver Regeln">
+            <span id="statisticsActiveBar" class="active"></span>
+            <span id="statisticsInactiveBar" class="inactive"></span>
+          </div>
+          <div class="statistics-legend">
+            <span><i class="active"></i>Aktiv</span>
+            <span><i class="inactive"></i>Inaktiv</span>
+          </div>
+        </section>
+        <div class="statistics-table-wrap">
+          <table id="configStatisticsTable" class="statistics-table">
+            <thead>
+              <tr>
+                <th>Bericht</th>
+                <th>Regelgruppen</th>
+                <th>Regeln</th>
+                <th>Aktiv</th>
+                <th>Inaktiv</th>
+                <th>Verteilung</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button id="exportConfigStatisticsBtn" class="button secondary" type="button" disabled>Tabelle exportieren</button>
+        <button id="closeConfigStatisticsActionBtn" class="button primary" type="button">Schließen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="aiConfigDialog" class="config-dialog" aria-labelledby="aiConfigDialogTitle">
+    <form id="aiConfigForm" method="dialog">
+      <div class="dialog-head">
+        <h2 id="aiConfigDialogTitle">KI-Zugang einrichten</h2>
+        <button id="closeAiConfigDialogBtn" class="icon-button" type="button" aria-label="Dialog schließen" title="Dialog schließen">×</button>
+      </div>
+      <div class="dialog-fields">
+        <label class="field" for="aiConfigNameInput">
+          <span>Bezeichnung</span>
+          <input id="aiConfigNameInput" name="name" type="text" value="Groq" required maxlength="120">
+        </label>
+        <label class="field" for="aiProviderInput">
+          <span>Anbieter</span>
+          <select id="aiProviderInput" name="provider">
+            <option value="groq">Groq</option>
+            <option value="openai">OpenAI / ChatGPT</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="perplexity">Perplexity</option>
+            <option value="ollama">Ollama lokal</option>
+            <option value="lmstudio">LM Studio lokal</option>
+            <option value="openai_compatible">Eigener OpenAI-kompatibler Dienst</option>
+          </select>
+        </label>
+        <label class="field" for="aiModelInput">
+          <span>Modell</span>
+          <input id="aiModelInput" name="model" type="text" value="openai/gpt-oss-120b" list="aiModelSuggestions" required maxlength="200">
+          <datalist id="aiModelSuggestions">
+            <option value="openai/gpt-oss-120b"></option>
+            <option value="gpt-5-mini"></option>
+            <option value="gemini-3.5-flash"></option>
+            <option value="sonar"></option>
+            <option value="qwen3:8b"></option>
+          </datalist>
+        </label>
+        <label class="field" for="aiBaseUrlInput">
+          <span>API-Adresse</span>
+          <input id="aiBaseUrlInput" name="baseUrl" type="url" value="https://api.groq.com/openai/v1" required maxlength="500">
+        </label>
+        <label class="field" for="aiApiKeyInput">
+          <span>API-Key</span>
+          <input id="aiApiKeyInput" name="apiKey" type="password" autocomplete="new-password" maxlength="2048" placeholder="Bei lokalen Diensten optional">
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancelAiConfigBtn" class="button secondary" type="button">Abbrechen</button>
+        <button id="saveAiConfigBtn" class="button primary" type="submit">Speichern und prüfen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="ruleTemplateCatalogDialog" class="config-dialog rule-template-dialog" aria-labelledby="ruleTemplateCatalogTitle">
+    <form id="ruleTemplateForm" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <h2 id="ruleTemplateCatalogTitle">Regelkatalog</h2>
+          <span class="meta-line">Globale, projektübergreifende Regelvorlagen</span>
+        </div>
+        <div class="dialog-head-actions">
+          <button id="newRuleTemplateBtn" class="button secondary compact-button" type="button">+ Vorlage</button>
+          <button id="closeRuleTemplateCatalogBtn" class="icon-button" type="button" aria-label="Dialog schließen" title="Dialog schließen">×</button>
+        </div>
+      </div>
+      <div class="rule-template-layout">
+        <aside class="rule-template-sidebar" aria-label="Regelvorlagen">
+          <div class="rule-template-analysis-actions">
+            <button id="analyzeExistingRulesBtn" class="button secondary compact-button" type="button">Master Data analysieren</button>
+          </div>
+          <div id="ruleTemplateAnalysisPanel" class="rule-template-analysis-panel" hidden>
+            <strong>Analysekandidaten</strong>
+            <span id="ruleTemplateAnalysisInfo" class="meta-line"></span>
+            <div id="ruleTemplateCandidateList" class="rule-template-candidate-list"></div>
+            <button id="importRuleTemplateCandidatesBtn" class="button primary compact-button" type="button">Auswahl als Entwürfe übernehmen</button>
+          </div>
+          <div id="ruleTemplateList" class="rule-template-list"></div>
+        </aside>
+        <section id="ruleTemplateCandidateDetail" class="rule-template-candidate-detail" hidden>
+          <div class="candidate-detail-head">
+            <div>
+              <span class="meta-line">Analysekandidat</span>
+              <h3 id="ruleTemplateCandidateName">-</h3>
+            </div>
+            <span id="ruleTemplateCandidateStatus" class="badge">Offen</span>
+          </div>
+          <div id="ruleTemplateCandidateMeta" class="meta-line"></div>
+          <div class="candidate-detail-section">
+            <strong>Bedingung</strong>
+            <code id="ruleTemplateCandidateCondition" class="candidate-condition"></code>
+          </div>
+          <div class="candidate-detail-section">
+            <strong>Parameter</strong>
+            <div id="ruleTemplateCandidateParameters" class="candidate-detail-list"></div>
+          </div>
+          <div class="candidate-detail-section">
+            <strong>Fehlermeldungen</strong>
+            <div id="ruleTemplateCandidateMessages" class="candidate-detail-list"></div>
+          </div>
+          <div class="candidate-detail-section candidate-locations-section">
+            <strong>Fundstellen</strong>
+            <div id="ruleTemplateCandidateLocations" class="candidate-location-list"></div>
+          </div>
+          <div class="candidate-detail-actions">
+            <button id="rejectRuleTemplateCandidateBtn" class="button danger" type="button">Ablehnen</button>
+            <button id="openCandidateTemplateBtn" class="button secondary" type="button" hidden>Vorlage öffnen</button>
+            <button id="importSingleRuleTemplateCandidateBtn" class="button primary" type="button">Als Entwurf übernehmen</button>
+          </div>
+        </section>
+        <div id="ruleTemplateEditorPanel" class="dialog-fields rule-template-fields">
+          <div class="rule-template-meta-grid">
+            <label class="field" for="ruleTemplateKeyInput">
+              <span>Schlüssel</span>
+              <input id="ruleTemplateKeyInput" type="text" required maxlength="120">
+            </label>
+            <label class="field" for="ruleTemplateStatusSelect">
+              <span>Status</span>
+              <select id="ruleTemplateStatusSelect">
+                <option value="draft">Entwurf</option>
+                <option value="approved">Freigegeben</option>
+                <option value="deprecated">Veraltet</option>
+              </select>
+            </label>
+          </div>
+          <label class="field" for="ruleTemplateNameInput">
+            <span>Name</span>
+            <input id="ruleTemplateNameInput" type="text" required maxlength="240">
+          </label>
+          <label class="field" for="ruleTemplateDescriptionInput">
+            <span>Beschreibung</span>
+            <textarea id="ruleTemplateDescriptionInput" rows="2" maxlength="2000"></textarea>
+          </label>
+          <label class="field" for="ruleTemplateConditionInput">
+            <span>Bedingung mit {field}</span>
+            <textarea id="ruleTemplateConditionInput" class="code-input" rows="3" required maxlength="100000"></textarea>
+          </label>
+          <div class="rule-template-meta-grid">
+            <label class="field" for="ruleTemplateDimensionInput">
+              <span>DQ-Typ</span>
+              <select id="ruleTemplateDimensionInput">
+                <option value="Vollständigkeit">Vollständigkeit</option>
+                <option value="Validität">Validität</option>
+                <option value="Korrektheit">Korrektheit</option>
+                <option value="Eindeutigkeit">Eindeutigkeit</option>
+                <option value="Konsistenz">Konsistenz</option>
+                <option value="Aktualität">Aktualität</option>
+                <option value="Genauigkeit">Genauigkeit</option>
+                <option value="Redundanz">Redundanz</option>
+                <option value="Einheitlichkeit">Einheitlichkeit</option>
+                <option value="Relevanz">Relevanz</option>
+                <option value="Zuverlässigkeit">Zuverlässigkeit</option>
+                <option value="Verständlichkeit">Verständlichkeit</option>
+              </select>
+            </label>
+            <label class="field" for="ruleTemplateTypeInput">
+              <span>Regeltyp</span>
+              <input id="ruleTemplateTypeInput" type="text" required maxlength="120">
+            </label>
+          </div>
+          <label class="field" for="ruleTemplateMessageDeInput">
+            <span>Fehlermeldung Deutsch</span>
+            <input id="ruleTemplateMessageDeInput" type="text" maxlength="2000">
+          </label>
+          <label class="field" for="ruleTemplateMessageEnInput">
+            <span>Fehlermeldung Englisch</span>
+            <input id="ruleTemplateMessageEnInput" type="text" maxlength="2000">
+          </label>
+          <label class="field" for="ruleTemplateParametersInput">
+            <span>Parameterdefinition (JSON)</span>
+            <textarea id="ruleTemplateParametersInput" class="code-input" rows="4">{}</textarea>
+          </label>
+          <div class="rule-template-meta-grid">
+            <label class="field" for="ruleTemplateDataTypesInput">
+              <span>Datentypen</span>
+              <input id="ruleTemplateDataTypesInput" type="text" placeholder="string, date">
+            </label>
+            <label class="field" for="ruleTemplateCategoriesInput">
+              <span>Feldkategorien</span>
+              <input id="ruleTemplateCategoriesInput" type="text" placeholder="master-data, address">
+            </label>
+          </div>
+          <label class="field" for="ruleTemplateChangeNoteInput">
+            <span>Änderungshinweis</span>
+            <input id="ruleTemplateChangeNoteInput" type="text" maxlength="1000">
+          </label>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <span id="ruleTemplateVersionInfo" class="meta-line">Neue Vorlage</span>
+        <button id="cancelRuleTemplateCatalogBtn" class="button secondary" type="button">Schließen</button>
+        <button id="saveRuleTemplateBtn" class="button primary" type="submit">Vorlage speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/assets/app.js?v=20260810-version-export" defer></script>
+</body>
+</html>
