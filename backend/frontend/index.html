@@ -158,7 +158,14 @@
                 </select>
               </label>
               <button id="renderSqlBtn" class="button secondary" type="button" disabled>SQL-Vorschau</button>
-              <button id="exportSqlBtn" class="button secondary expert-only" type="button" disabled>SQL exportieren</button>
+              <div id="exportDropdownWrap" class="export-dropdown-wrap expert-only">
+                <button id="exportDropdownBtn" class="button secondary" type="button" disabled aria-haspopup="true" aria-expanded="false" aria-controls="exportDropdownMenu">Export ▾</button>
+                <ul id="exportDropdownMenu" class="export-dropdown-menu" role="menu" hidden>
+                  <li role="menuitem"><button class="export-menu-item" data-format="mssql" type="button">SQL (MSSQL / T-SQL)</button></li>
+                  <li role="menuitem"><button class="export-menu-item" data-format="json" type="button">JSON (Regelmetadaten)</button></li>
+                  <li role="menuitem"><button class="export-menu-item" data-format="infozoom" type="button">InfoZoom (Textdefinition)</button></li>
+                </ul>
+              </div>
               <button id="writeNemoBtn" class="button secondary danger" type="button" disabled>In NEMO speichern</button>
               <button id="resetEditorBtn" class="button secondary expert-only" type="button" disabled>Zurücksetzen</button>
               <button id="saveDraftBtn" class="button primary expert-only" type="button" disabled>Draft speichern</button>
@@ -392,6 +399,32 @@
          <button id="exportRulesDetailsBtn" class="button secondary" type="button" disabled>Regeldetails exportieren</button>
          <button id="closeConfigStatisticsActionBtn" class="button primary" type="button">Schließen</button>
        </div>
+    </form>
+  </dialog>
+
+  <dialog id="mssqlExportDialog" class="config-dialog" aria-labelledby="mssqlExportDialogTitle">
+    <form id="mssqlExportForm" method="dialog">
+      <div class="dialog-head">
+        <h2 id="mssqlExportDialogTitle">Export als MSSQL (T-SQL)</h2>
+        <button id="closeMssqlExportDialogBtn" class="icon-button" type="button" aria-label="Dialog schließen" title="Dialog schließen">×</button>
+      </div>
+      <div class="dialog-fields">
+        <fieldset class="field">
+          <legend>Export-Modus</legend>
+          <label class="radio-option">
+            <input type="radio" name="mssqlMode" value="create_and_insert" checked>
+            <span>Create Table + Inserts <small>(für neuen Export)</small></span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="mssqlMode" value="insert_only">
+            <span>Inserts only <small>(für bestehende Tabelle)</small></span>
+          </label>
+        </fieldset>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancelMssqlExportBtn" class="button secondary" type="button">Abbrechen</button>
+        <button id="confirmMssqlExportBtn" class="button primary" type="button">Exportieren</button>
+      </div>
     </form>
   </dialog>
 

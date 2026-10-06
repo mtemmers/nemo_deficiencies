@@ -83,6 +83,12 @@ from backend.services.rule_catalog_store import (
 )
 from backend.services.sql_generator import SqlGenerationError, render_sql_from_model, render_top_25_sql
 from backend.services.sql_model import get_rule_catalog, merge_missing_group_metadata, normalize_editor_model, parse_editor_model
+from backend.export_connectors import (
+    ExportConnectorError,
+    get_connector,
+    list_connectors,
+)
+import backend.export_connectors  # noqa: F401 – trigger auto-discovery at import time
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -427,6 +433,14 @@ class RuleTemplateBindingRequest(BaseModel):
     group_ref: str = Field(alias="groupRef", min_length=1, max_length=500)
     rule_ref: str = Field(alias="ruleRef", min_length=1, max_length=500)
     parameters: dict = Field(default_factory=dict)
+
+
+class EditorExportRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    editor_model: dict = Field(alias="editorModel")
+    format: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
+    options: dict = Field(default_factory=dict)
 
 
 class RuleCatalogAnalysisRequest(BaseModel):
@@ -1947,6 +1961,82 @@ def export_report_sql(report_ref: str, request: EditorModelRequest) -> Response:
         content=payload["sql"],
         media_type="text/sql; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/export-connectors")
+def get_export_connectors() -> dict:
+    """List all available export connectors."""
+    return {"connectors": list_connectors()}
+
+
+@app.post("/api/editor/{report_ref}/export")
+def export_editor_model(report_ref: str, request: EditorExportRequest) -> Response:
+    """
+    Export an editor model in the requested format via the connector framework.
+
+    Body:
+        editorModel: The full editor model dict
+        format:      Connector name, e.g. "mssql", "json", "infozoom"
+        options:     Format-specific options dict
+
+    Returns a file download response with warnings embedded in the content.
+    """
+    try:
+        connector = get_connector(request.format)
+    except KeyError:
+        available = ", ".join(c["name"] for c in list_connectors())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown export format '{request.format}'. Available: {available}",
+        )
+
+    model = normalize_editor_model(dict(request.editor_model))
+
+    try:
+        warnings = connector.validate(model)
+        content = connector.export(model, options=dict(request.options))
+    except ExportConnectorError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Build download filename from report info
+    report = model.get("report") or {}
+    raw_name = (
+        report.get("internalName")
+        or report.get("displayName")
+        or report.get("id")
+        or report_ref
+        or "nemo_export"
+    )
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw_name)).strip("._") or "nemo_export"
+    ext = connector.file_extension
+    filename = f"{stem}.{ext}" if not stem.lower().endswith(f".{ext}") else stem
+
+    # Choose media type by format
+    media_types = {
+        "json": "application/json; charset=utf-8",
+        "mssql": "text/sql; charset=utf-8",
+        "infozoom": "text/plain; charset=utf-8",
+    }
+    media_type = media_types.get(request.format, "text/plain; charset=utf-8")
+
+    # Encode as bytes (UTF-8)
+    content_bytes = content.encode("utf-8")
+
+    groups = ((model.get("checks") or {}).get("groups") or [])
+    all_rules = [r for g in groups for r in (g.get("rules") or [])]
+
+    response_headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Export-Format": request.format,
+        "X-Export-Warnings": str(len(warnings)),
+        "X-Export-Total-Rules": str(len(all_rules)),
+    }
+
+    return Response(
+        content=content_bytes,
+        media_type=media_type,
+        headers=response_headers,
     )
 
 

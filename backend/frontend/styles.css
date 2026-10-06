@@ -2789,3 +2789,68 @@ th {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* ---- Export Dropdown --------------------------------------------------- */
+.export-dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.export-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  min-width: 200px;
+  padding: 4px 0;
+  margin: 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.export-dropdown-menu[hidden] {
+  display: none;
+}
+
+.export-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.export-menu-item:hover,
+.export-menu-item:focus {
+  background: var(--surface-2);
+  outline: none;
+}
+
+/* MSSQL export dialog radio options */
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.radio-option input[type="radio"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.radio-option small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
