@@ -353,6 +353,24 @@
           </div>
         </section>
         <div class="statistics-table-wrap">
+          <div class="statistics-export-options">
+            <div class="export-filter-row">
+              <label for="statisticsRuleStatusFilter">
+                <span>Regelstatus:</span>
+                <select id="statisticsRuleStatusFilter">
+                  <option value="both">Aktive und Inaktive</option>
+                  <option value="active">Nur aktive</option>
+                  <option value="inactive">Nur inaktive</option>
+                </select>
+              </label>
+              <label for="statisticsReportFilter">
+                <span>Bericht:</span>
+                <select id="statisticsReportFilter">
+                  <option value="">Alle Berichte</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <table id="configStatisticsTable" class="statistics-table">
             <thead>
               <tr>
@@ -369,10 +387,11 @@
           </table>
         </div>
       </div>
-      <div class="dialog-actions">
-        <button id="exportConfigStatisticsBtn" class="button secondary" type="button" disabled>Tabelle exportieren</button>
-        <button id="closeConfigStatisticsActionBtn" class="button primary" type="button">Schließen</button>
-      </div>
+       <div class="dialog-actions">
+         <button id="exportConfigStatisticsBtn" class="button secondary" type="button" disabled>Statistiktabelle exportieren</button>
+         <button id="exportRulesDetailsBtn" class="button secondary" type="button" disabled>Regeldetails exportieren</button>
+         <button id="closeConfigStatisticsActionBtn" class="button primary" type="button">Schließen</button>
+       </div>
     </form>
   </dialog>
 

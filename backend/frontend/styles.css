@@ -1061,6 +1061,38 @@ h2 {
   border-radius: 6px;
 }
 
+.statistics-export-options {
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.export-filter-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.export-filter-row label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.export-filter-row select {
+  min-width: 140px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
 .statistics-table {
   min-width: 720px;
 }

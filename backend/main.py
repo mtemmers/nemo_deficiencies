@@ -24,6 +24,7 @@ from backend.services.ai_translation_cache_store import AITranslationCacheStore
 from backend.services.field_profiler import build_anonymized_field_profile
 from backend.services.harmonization import HarmonizationError, build_harmonization_matrix, prepare_group_transfer
 from backend.services.config_statistics import build_config_statistics
+from backend.services.rules_export import build_rules_csv, RuleStatusFilter
 from backend.services.config_store import (
     DEFAULT_NEMO_ENVIRONMENT,
     DEFAULT_NEMO_URL,
@@ -1375,6 +1376,52 @@ def get_config_statistics(
         "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         **statistics,
     }
+
+
+@app.get("/api/statistics/export-rules")
+def export_statistics_rules(
+    config_id: Optional[str] = Query(default=None, alias="configId"),
+    project: str = Query(default=DEFAULT_PROJECT),
+    report_id: Optional[str] = Query(default=None, alias="reportId"),
+    active_only: str = Query(default="both", alias="activeOnly"),
+    language: str = Query(default="de"),
+) -> Response:
+    """
+    Export detailed rule overview as CSV.
+    
+    Query parameters:
+    - configId: Configuration ID
+    - project: Project name (default: "Master Data")
+    - reportId: Optional report ID to filter (null/empty = all reports)
+    - activeOnly: "active", "inactive", or "both" (default)
+    - language: "de" or "en" (default: "de")
+    """
+    profile, report_models, _columns, _skipped_reports = _load_harmonization_context(config_id, project)
+    
+    # Validate status filter
+    status_filter = active_only.lower()
+    if status_filter not in ("active", "inactive", "both"):
+        status_filter = "both"
+    
+    # Generate CSV
+    csv_content = build_rules_csv(
+        report_models=report_models,
+        report_id_filter=report_id if report_id and report_id.strip() else None,
+        status_filter=status_filter,
+        language=language,
+    )
+    
+    # Build filename
+    report_suffix = f"_{report_id}" if report_id and report_id.strip() else "_all"
+    status_suffix = f"_{active_only.lower()}" if active_only.lower() != "both" else ""
+    timestamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    filename = f"rules_export{report_suffix}{status_suffix}_{timestamp}.csv"
+    
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/api/harmonization/preview")

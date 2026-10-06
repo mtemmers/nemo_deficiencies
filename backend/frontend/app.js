@@ -170,20 +170,24 @@ const elements = {
   configStatisticsDialog: document.querySelector("#configStatisticsDialog"),
   closeConfigStatisticsBtn: document.querySelector("#closeConfigStatisticsBtn"),
   closeConfigStatisticsActionBtn: document.querySelector("#closeConfigStatisticsActionBtn"),
-  exportConfigStatisticsBtn: document.querySelector("#exportConfigStatisticsBtn"),
-  configStatisticsInfo: document.querySelector("#configStatisticsInfo"),
-  configStatisticsLoading: document.querySelector("#configStatisticsLoading"),
-  configStatisticsContent: document.querySelector("#configStatisticsContent"),
-  statisticsReportsMetric: document.querySelector("#statisticsReportsMetric"),
-  statisticsGroupsMetric: document.querySelector("#statisticsGroupsMetric"),
-  statisticsFieldsMetric: document.querySelector("#statisticsFieldsMetric"),
-  statisticsRulesMetric: document.querySelector("#statisticsRulesMetric"),
-  statisticsActiveMetric: document.querySelector("#statisticsActiveMetric"),
-  statisticsInactiveMetric: document.querySelector("#statisticsInactiveMetric"),
-  statisticsActiveRate: document.querySelector("#statisticsActiveRate"),
-  statisticsActiveBar: document.querySelector("#statisticsActiveBar"),
-  statisticsInactiveBar: document.querySelector("#statisticsInactiveBar"),
-  configStatisticsTable: document.querySelector("#configStatisticsTable"),
+   exportConfigStatisticsBtn: document.querySelector("#exportConfigStatisticsBtn"),
+   configStatisticsInfo: document.querySelector("#configStatisticsInfo"),
+   configStatisticsLoading: document.querySelector("#configStatisticsLoading"),
+   configStatisticsContent: document.querySelector("#configStatisticsContent"),
+   statisticsReportsMetric: document.querySelector("#statisticsReportsMetric"),
+   statisticsGroupsMetric: document.querySelector("#statisticsGroupsMetric"),
+   statisticsFieldsMetric: document.querySelector("#statisticsFieldsMetric"),
+   statisticsRulesMetric: document.querySelector("#statisticsRulesMetric"),
+   statisticsActiveMetric: document.querySelector("#statisticsActiveMetric"),
+   statisticsInactiveMetric: document.querySelector("#statisticsInactiveMetric"),
+   statisticsActiveRate: document.querySelector("#statisticsActiveRate"),
+   statisticsActiveBar: document.querySelector("#statisticsActiveBar"),
+   statisticsInactiveBar: document.querySelector("#statisticsInactiveBar"),
+   statisticsRuleStatusFilter: document.querySelector("#statisticsRuleStatusFilter"),
+   statisticsReportFilter: document.querySelector("#statisticsReportFilter"),
+   exportConfigStatisticsBtn: document.querySelector("#exportConfigStatisticsBtn"),
+   exportRulesDetailsBtn: document.querySelector("#exportRulesDetailsBtn"),
+   configStatisticsTable: document.querySelector("#configStatisticsTable"),
   projectTabs: document.querySelector("#projectTabs"),
   searchInput: document.querySelector("#searchInput"),
   refreshBtn: document.querySelector("#refreshBtn"),
@@ -718,13 +722,14 @@ async function openConfigStatistics() {
       project: requestedProject,
     });
     const payload = await requestJson(`/api/config-statistics?${params.toString()}`);
-    if (requestedConfigId !== state.configId || requestedProject !== state.project) {
-      return;
-    }
-    state.configStatistics = payload;
-    renderConfigStatistics();
-    elements.configStatisticsContent.hidden = false;
-    elements.exportConfigStatisticsBtn.disabled = false;
+     if (requestedConfigId !== state.configId || requestedProject !== state.project) {
+       return;
+     }
+     state.configStatistics = payload;
+     renderConfigStatistics();
+     elements.configStatisticsContent.hidden = false;
+     elements.exportConfigStatisticsBtn.disabled = false;
+     elements.exportRulesDetailsBtn.disabled = false;
   } catch (error) {
     elements.configStatisticsInfo.textContent = error.message;
     showToast(error.message);
@@ -777,6 +782,27 @@ function renderConfigStatistics() {
       ? `${activeRules} active and ${inactiveRules} inactive rules`
       : `${activeRules} aktive und ${inactiveRules} inaktive Regeln`,
   );
+
+  // Populate report filter dropdown
+  const reportFilter = elements.statisticsReportFilter;
+  const currentValue = reportFilter.value;
+  reportFilter.replaceChildren();
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = state.uiLanguage === "en" ? "All reports" : "Alle Berichte";
+  reportFilter.append(allOption);
+  
+  for (const report of payload.reports || []) {
+    const option = document.createElement("option");
+    option.value = report.internalName || report.id || "";
+    option.textContent = report.displayName || report.internalName || "";
+    reportFilter.append(option);
+  }
+  
+  // Restore previous selection if it still exists
+  if (currentValue) {
+    reportFilter.value = currentValue;
+  }
 
   const body = elements.configStatisticsTable.querySelector("tbody");
   const foot = elements.configStatisticsTable.querySelector("tfoot");
@@ -836,6 +862,10 @@ function statisticsMiniBar(active, inactive) {
 }
 
 function exportConfigStatistics() {
+  exportStatisticsTable();
+}
+
+function exportStatisticsTable() {
   const payload = state.configStatistics;
   if (!payload) {
     return;
@@ -876,6 +906,62 @@ function exportConfigStatistics() {
   const date = new Date().toISOString().slice(0, 10);
   downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${safeName}_statistics_${date}.csv`);
   showToast(state.uiLanguage === "en" ? "Statistics table exported" : "Statistiktabelle exportiert");
+}
+
+function exportRulesDetails() {
+  const payload = state.configStatistics;
+  if (!payload) {
+    return;
+  }
+  
+  // Get filter values from UI
+  const reportFilter = elements.statisticsReportFilter?.value || "";
+  const statusFilter = elements.statisticsRuleStatusFilter?.value || "both";
+  
+  // Call async export
+  exportDetailedRules(reportFilter, statusFilter);
+}
+
+async function exportDetailedRules(reportId, statusFilter) {
+  const payload = state.configStatistics;
+  if (!payload) {
+    return;
+  }
+  
+  try {
+    elements.exportRulesDetailsBtn.disabled = true;
+    
+    const params = new URLSearchParams({
+      configId: payload.configId || "",
+      project: payload.project || "Master Data",
+      activeOnly: statusFilter || "both",
+      language: state.uiLanguage,
+    });
+    
+    if (reportId && reportId.trim()) {
+      params.append("reportId", reportId);
+    }
+    
+    const response = await fetch(`/api/statistics/export-rules?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("content-disposition");
+    let filename = "rules_export.csv";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]*)"?/);
+      if (match) filename = match[1];
+    }
+    
+    downloadBlob(blob, filename);
+    showToast(state.uiLanguage === "en" ? "Detailed rules exported" : "Detaillierte Regelübersicht exportiert");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    elements.exportRulesDetailsBtn.disabled = false;
+  }
 }
 
 function csvCell(value) {
@@ -5680,13 +5766,14 @@ function bindEvents() {
       elements.configNameInput.value = configNameFromTenant(elements.configTenantInput.value);
     }
   });
-  elements.closeConfigStatisticsBtn.addEventListener("click", closeConfigStatistics);
-  elements.closeConfigStatisticsActionBtn.addEventListener("click", closeConfigStatistics);
-  elements.exportConfigStatisticsBtn.addEventListener("click", exportConfigStatistics);
-  elements.configStatisticsDialog.addEventListener("cancel", (event) => {
-    event.preventDefault();
-    closeConfigStatistics();
-  });
+   elements.closeConfigStatisticsBtn.addEventListener("click", closeConfigStatistics);
+   elements.closeConfigStatisticsActionBtn.addEventListener("click", closeConfigStatistics);
+   elements.exportConfigStatisticsBtn.addEventListener("click", exportConfigStatistics);
+   elements.exportRulesDetailsBtn.addEventListener("click", exportRulesDetails);
+   elements.configStatisticsDialog.addEventListener("cancel", (event) => {
+     event.preventDefault();
+     closeConfigStatistics();
+   });
   elements.configSelect.addEventListener("change", async () => {
     state.configId = elements.configSelect.value;
     state.configStatistics = null;
