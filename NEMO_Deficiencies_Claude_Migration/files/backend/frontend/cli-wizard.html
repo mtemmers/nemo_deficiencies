@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CLI-Wizard - NEMO Deficiencies</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260810-version-export">
+  <link rel="stylesheet" href="/assets/cli-wizard.css?v=20260810-version-export">
+</head>
+<body>
+  <div class="cli-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">ND</span>
+        <div class="brand-text">
+          <strong>NEMO Deficiencies</strong>
+          <span id="appVersion" class="connection-state">v-</span>
+          <span class="connection-state">CLI-Wizard</span>
+        </div>
+      </div>
+      <a class="button secondary" href="/">Zur Anwendung</a>
+    </header>
+
+    <main class="cli-main">
+      <header class="cli-heading">
+        <p class="eyebrow">Kommandozeile</p>
+        <h1>Aufruf erstellen</h1>
+        <p>Konfiguration und Export auswählen. Zugangsdaten werden nicht im Befehl ausgegeben.</p>
+      </header>
+
+      <form id="cliForm" class="cli-form">
+        <section class="cli-section" aria-labelledby="connectionHeading">
+          <h2 id="connectionHeading">Verbindung</h2>
+          <div class="cli-grid two-columns">
+            <label class="field" for="configSelect">
+              <span>Konfiguration</span>
+              <select id="configSelect" required></select>
+              <small id="configTenant" class="cli-help"></small>
+            </label>
+            <label class="field" for="projectSelect">
+              <span>Projekt</span>
+              <select id="projectSelect">
+                <option value="Master Data">Master Data</option>
+                <option value="Business Processes">Business Processes</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="cli-section" aria-labelledby="actionHeading">
+          <h2 id="actionHeading">Aktion</h2>
+          <div class="cli-choice-grid" role="radiogroup" aria-label="Aktion">
+            <label class="cli-choice">
+              <input type="radio" name="action" value="show" checked>
+              <span><strong>Berichte anzeigen</strong><small>Verfügbare Berichte in der Konsole auflisten</small></span>
+            </label>
+            <label class="cli-choice">
+              <input type="radio" name="action" value="sql">
+              <span><strong>SQL exportieren</strong><small>Berichtsdefinitionen und Index lokal speichern</small></span>
+            </label>
+            <label class="cli-choice">
+              <input type="radio" name="action" value="data">
+              <span><strong>SQL und Daten exportieren</strong><small>Berichte ausführen und Ergebnisse als CSV speichern</small></span>
+            </label>
+          </div>
+        </section>
+
+        <section id="selectionSection" class="cli-section" aria-labelledby="selectionHeading">
+          <h2 id="selectionHeading">Berichtsauswahl</h2>
+          <div id="exportOptions" class="cli-grid two-columns" hidden>
+            <label class="field" for="selectionMode">
+              <span>Auswahl</span>
+              <select id="selectionMode">
+                <option value="all">Alle Berichte</option>
+                <option value="exact">Bestimmte Berichte</option>
+                <option value="contains">Name enthält</option>
+              </select>
+            </label>
+            <label class="field" for="outputInput">
+              <span>Zielordner</span>
+              <input id="outputInput" placeholder="Dokumente\NEMO Deficiencies Exports" spellcheck="false">
+              <small class="cli-help">Der Tenant wird automatisch als Unterordner ergänzt.</small>
+            </label>
+          </div>
+          <label id="reportValuesField" class="field" for="reportValues" hidden>
+            <span>Suchbegriffe</span>
+            <textarea id="reportValues" rows="4" placeholder="Ein Suchbegriff pro Zeile"></textarea>
+            <small class="cli-help">Ein Suchbegriff pro Zeile.</small>
+          </label>
+          <div id="reportBrowser" class="cli-report-browser" hidden>
+            <div class="cli-report-tools">
+              <label class="field cli-report-search" for="reportSearchInput">
+                <span>Berichte durchsuchen</span>
+                <input id="reportSearchInput" type="search" placeholder="Displayname, Internalname oder Beschreibung" autocomplete="off">
+              </label>
+              <div class="cli-report-actions">
+                <button id="selectAllReportsBtn" class="button secondary" type="button">Alle auswählen</button>
+                <button id="clearReportsBtn" class="button secondary" type="button">Auswahl aufheben</button>
+              </div>
+            </div>
+            <p id="reportLoadState" class="cli-report-state" role="status" aria-live="polite">Berichte werden geladen ...</p>
+            <div id="reportChoiceList" class="cli-report-list" role="group" aria-label="Berichte auswählen"></div>
+          </div>
+          <label id="refreshIndexField" class="cli-checkbox" hidden>
+            <input id="refreshIndex" type="checkbox">
+            <span>Vollständigen Berichtsindex neu erzeugen</span>
+          </label>
+        </section>
+
+        <section class="cli-section cli-run-section" aria-labelledby="runHeading">
+          <div>
+            <h2 id="runHeading">Direkt ausführen</h2>
+            <p id="runHint" class="cli-help">Die verfügbaren Berichte werden oben angezeigt.</p>
+          </div>
+          <button id="runExportBtn" class="button primary cli-run-button" type="button" disabled>
+            <span id="runExportLabel">Export starten</span>
+          </button>
+          <div id="exportResult" class="cli-export-result" role="status" aria-live="polite" hidden></div>
+        </section>
+
+        <details class="cli-advanced">
+          <summary>PowerShell-Automatisierung</summary>
+          <section class="cli-output" aria-labelledby="commandHeading">
+            <div class="cli-output-heading">
+              <div>
+                <h2 id="commandHeading">Wiederverwendbares PowerShell-Skript</h2>
+                <p class="cli-help">Die Portable-Anwendung muss laufen. Python und Zugangsdaten sind nicht erforderlich.</p>
+              </div>
+              <div class="cli-output-actions">
+                <button id="downloadCommandBtn" class="button secondary" type="button">PS1 herunterladen</button>
+                <button id="copyCommandBtn" class="button secondary" type="button">Kopieren</button>
+              </div>
+            </div>
+            <pre id="commandPreview" tabindex="0"></pre>
+            <p id="copyState" class="cli-status" role="status" aria-live="polite"></p>
+          </section>
+        </details>
+      </form>
+    </main>
+  </div>
+  <script src="/assets/cli-wizard.js?v=20260810-version-export" defer></script>
+</body>
+</html>

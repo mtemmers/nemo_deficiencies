@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+cryptography>=42
+requests>=2.32
+nemo_library==1.6.63
+pandas
+openpyxl>=3.1,<4
+reportlab>=4.2,<5
