@@ -236,7 +236,7 @@ class AIConfigCreateRequest(BaseModel):
     name: str = Field(default="Groq", min_length=1, max_length=120)
     provider: str = Field(
         default="groq",
-        pattern=r"^(groq|openai|perplexity|gemini|ollama|lmstudio|openai_compatible)$",
+        pattern=r"^(groq|openai|perplexity|gemini|ollama|lmstudio|openai_compatible|litellm)$",
     )
     base_url: str = Field(default="https://api.groq.com/openai/v1", alias="baseUrl", min_length=1, max_length=500)
     model: str = Field(default="openai/gpt-oss-120b", min_length=1, max_length=200)
@@ -1317,7 +1317,42 @@ def validate_editor_model_request(request: EditorModelRequest) -> dict:
     }
 
 @app.get("/api/projects")
-def list_projects() -> dict:
+def list_projects(config_id: Optional[str] = Query(default=None, alias="configId")) -> dict:
+    # If config_id is provided, fetch projects from NEMO
+    if config_id:
+        log.info("Lade Projekte aus NEMO für config=%s", config_id)
+        try:
+            with _nemo_for_config(config_id) as (profile, nemo):
+                log.info("NEMO-Client erstellt für config=%s", config_id)
+                projects_raw = nemo.getProjects(filter="*")
+                log.info("getProjects() zurückgekehrt: %d Projekte", len(projects_raw))
+                projects = [
+                    {"id": project.displayName or project.id or str(project), 
+                     "name": project.displayName or project.id or str(project)}
+                    for project in projects_raw
+                ]
+                log.info("Projekte konvertiert: %d Projekte", len(projects))
+                for i, p in enumerate(projects):
+                    log.info("  Projekt %d: id=%s, name=%s", i, p["id"], p["name"])
+                # Sort projects, with standard ones first
+                standard_project_names = {p for p in STANDARD_PROJECTS}
+                projects_sorted = sorted(
+                    projects,
+                    key=lambda p: (p["name"] not in standard_project_names, p["name"])
+                )
+                log.info("Projekte sortiert, %d insgesamt", len(projects_sorted))
+                return {
+                    "projects": projects_sorted,
+                    "defaultProject": DEFAULT_PROJECT,
+                }
+        except Exception as exc:
+            log.exception(
+                "Fehler beim Laden von Projekten aus NEMO für config=%s - verwende Standard-Projekte",
+                config_id,
+            )
+     
+    # Fallback to standard projects if no config_id or loading failed
+    log.info("Verwende Standard-Projekte (config_id=%s)", config_id)
     return {
         "projects": [
             {"id": project, "name": project, "default": project == DEFAULT_PROJECT}

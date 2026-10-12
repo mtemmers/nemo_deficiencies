@@ -1,13 +1,17 @@
 const LAST_CONFIG_STORAGE_KEY = "nemo-last-config-id";
 const LAST_AI_CONFIG_STORAGE_KEY = "nemo-last-ai-config-id";
+const LAST_PROJECT_STORAGE_PREFIX = "nemo-last-project-";
 const UI_MODE_STORAGE_KEY = "nemo-ui-mode";
 const UI_LANGUAGE_STORAGE_KEY = "nemo-ui-language";
 const REPORT_LANGUAGE_STORAGE_KEY = "nemo-report-language";
+const ERROR_LOG_STORAGE_KEY = "nemo-error-log";
+const MAX_ERROR_LOG_SIZE = 50;
 const AI_PROVIDER_PRESETS = {
   groq: { name: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "openai/gpt-oss-120b", keyRequired: true },
   openai: { name: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-5-mini", keyRequired: true },
   gemini: { name: "Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-3.5-flash", keyRequired: true },
   perplexity: { name: "Perplexity", baseUrl: "https://api.perplexity.ai", model: "sonar", keyRequired: true },
+  litellm: { name: "LiteLLM", baseUrl: "http://localhost:4000/v1", model: "gpt-3.5-turbo", keyRequired: false },
   ollama: { name: "Ollama lokal", baseUrl: "http://localhost:11434/v1", model: "qwen3:8b", keyRequired: false },
   lmstudio: { name: "LM Studio lokal", baseUrl: "http://localhost:1234/v1", model: "local-model", keyRequired: false },
   openai_compatible: { name: "Eigene KI", baseUrl: "http://localhost:8001/v1", model: "local-model", keyRequired: false },
@@ -102,16 +106,17 @@ const elements = {
   aiProfileSelect: document.querySelector("#aiProfileSelect"),
   aiConfigBtn: document.querySelector("#aiConfigBtn"),
   aiConfigDialog: document.querySelector("#aiConfigDialog"),
-  aiConfigForm: document.querySelector("#aiConfigForm"),
-  closeAiConfigDialogBtn: document.querySelector("#closeAiConfigDialogBtn"),
-  cancelAiConfigBtn: document.querySelector("#cancelAiConfigBtn"),
-  saveAiConfigBtn: document.querySelector("#saveAiConfigBtn"),
-  aiConfigNameInput: document.querySelector("#aiConfigNameInput"),
-  aiProviderInput: document.querySelector("#aiProviderInput"),
-  aiModelInput: document.querySelector("#aiModelInput"),
-  aiBaseUrlInput: document.querySelector("#aiBaseUrlInput"),
-  aiApiKeyInput: document.querySelector("#aiApiKeyInput"),
-  ruleTemplateCatalogBtn: document.querySelector("#ruleTemplateCatalogBtn"),
+   aiConfigForm: document.querySelector("#aiConfigForm"),
+   closeAiConfigDialogBtn: document.querySelector("#closeAiConfigDialogBtn"),
+   cancelAiConfigBtn: document.querySelector("#cancelAiConfigBtn"),
+   saveAiConfigBtn: document.querySelector("#saveAiConfigBtn"),
+   aiConfigNameInput: document.querySelector("#aiConfigNameInput"),
+   aiProviderInput: document.querySelector("#aiProviderInput"),
+   aiModelInput: document.querySelector("#aiModelInput"),
+   aiBaseUrlInput: document.querySelector("#aiBaseUrlInput"),
+   aiApiKeyInput: document.querySelector("#aiApiKeyInput"),
+   loadAiModelsBtn: document.querySelector("#loadAiModelsBtn"),
+   ruleTemplateCatalogBtn: document.querySelector("#ruleTemplateCatalogBtn"),
   ruleTemplateCatalogDialog: document.querySelector("#ruleTemplateCatalogDialog"),
   ruleTemplateForm: document.querySelector("#ruleTemplateForm"),
   closeRuleTemplateCatalogBtn: document.querySelector("#closeRuleTemplateCatalogBtn"),
@@ -189,8 +194,9 @@ const elements = {
    exportConfigStatisticsBtn: document.querySelector("#exportConfigStatisticsBtn"),
    exportRulesDetailsBtn: document.querySelector("#exportRulesDetailsBtn"),
    configStatisticsTable: document.querySelector("#configStatisticsTable"),
-  projectTabs: document.querySelector("#projectTabs"),
-  searchInput: document.querySelector("#searchInput"),
+   projectTabs: document.querySelector("#projectTabs"),
+   projectSelect: document.querySelector("#projectSelect"),
+   searchInput: document.querySelector("#searchInput"),
   refreshBtn: document.querySelector("#refreshBtn"),
   reportCount: document.querySelector("#reportCount"),
   reportList: document.querySelector("#reportList"),
@@ -563,68 +569,149 @@ function showToast(message) {
 }
 
 function activeConfig() {
-  return state.configs.find((config) => config.id === state.configId) || null;
-}
+   return state.configs.find((config) => config.id === state.configId) || null;
+ }
 
-function setConnectionState(status) {
-  const tenant = activeConfig()?.tenant || "";
-  elements.connectionState.textContent = tenant ? `${status} · ${tenant}` : status;
-}
-async function requestJson(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!response.ok) {
-    let message = `${response.status} ${response.statusText}`;
+ // Error logging to localStorage
+ function logError(errorName, errorMessage, details = {}) {
+   try {
+     const timestamp = new Date().toISOString();
+     const errorEntry = {
+       timestamp,
+       name: errorName,
+       message: errorMessage,
+       details: typeof details === 'string' ? details : JSON.stringify(details),
+     };
+     
+     let errorLog = [];
+     try {
+       const stored = localStorage.getItem(ERROR_LOG_STORAGE_KEY);
+       if (stored) {
+         errorLog = JSON.parse(stored);
+       }
+     } catch (e) {
+       errorLog = [];
+     }
+     
+     errorLog.push(errorEntry);
+     // Keep only last MAX_ERROR_LOG_SIZE errors
+     if (errorLog.length > MAX_ERROR_LOG_SIZE) {
+       errorLog = errorLog.slice(-MAX_ERROR_LOG_SIZE);
+     }
+     
+     localStorage.setItem(ERROR_LOG_STORAGE_KEY, JSON.stringify(errorLog));
+     console.log(`[ERROR LOG] ${errorName}: ${errorMessage}`, details);
+   } catch (e) {
+     console.error("Error logging failed:", e);
+   }
+ }
+
+ // Get error log for debugging
+ window.getErrorLog = function() {
+   try {
+     const log = localStorage.getItem(ERROR_LOG_STORAGE_KEY);
+     return log ? JSON.parse(log) : [];
+   } catch (e) {
+     return [];
+   }
+ };
+
+ // Clear error log
+ window.clearErrorLog = function() {
+   try {
+     localStorage.removeItem(ERROR_LOG_STORAGE_KEY);
+     console.log("Error log cleared");
+   } catch (e) {
+     console.error("Failed to clear error log:", e);
+   }
+ };
+
+ function setConnectionState(status) {
+   const tenant = activeConfig()?.tenant || "";
+   elements.connectionState.textContent = tenant ? `${status} · ${tenant}` : status;
+ }
+  async function requestJson(url, options = {}) {
     try {
-      const payload = await response.json();
-      message = apiDetailText(payload.detail) || message;
-    } catch (_) {
-      // Keep HTTP status text.
+      const response = await fetch(url, {
+        headers: { "Content-Type": "application/json" },
+       ...options,
+     });
+     if (!response.ok) {
+       let message = `${response.status} ${response.statusText}`;
+       try {
+         const payload = await response.json();
+         message = apiDetailText(payload.detail) || message;
+       } catch (_) {
+         // Keep HTTP status text.
+       }
+       const requestId = response.headers.get("X-Request-ID");
+       if (requestId && !message.includes(requestId)) {
+         message = `${message} (Vorgang: ${requestId})`;
+       }
+       logError("APIError", message, { url, status: response.status, requestId });
+       throw new Error(message);
+     }
+     if (response.status === 204) {
+       return null;
+     }
+     return response.json();
+    } catch (error) {
+      if (error instanceof Error) {
+        logError("FetchError", error.message, { url });
+      }
+      throw error;
     }
-    const requestId = response.headers.get("X-Request-ID");
-    if (requestId && !message.includes(requestId)) {
-      message = `${message} (Vorgang: ${requestId})`;
-    }
-    throw new Error(message);
   }
-  if (response.status === 204) {
-    return null;
-  }
-  return response.json();
-}
 
 async function loadBaseData() {
-  setStatus("lade");
-  const [health, configs, projects, ruleCatalog, ruleTemplates] = await Promise.all([
-    requestJson("/api/health"),
-    requestJson("/api/configs"),
-    requestJson("/api/projects"),
-    requestJson("/api/rule-catalog"),
-    requestJson("/api/rule-templates"),
-  ]);
+   setStatus("lade");
+   const [health, configs, ruleCatalog, ruleTemplates] = await Promise.all([
+     requestJson("/api/health"),
+     requestJson("/api/configs"),
+     requestJson("/api/rule-catalog"),
+     requestJson("/api/rule-templates"),
+   ]);
 
-  const version = health.version || "-";
-  elements.appVersion.textContent = `v${version}`;
-  document.title = `NEMO Deficiencies v${version}`;
+   const version = health.version || "-";
+   elements.appVersion.textContent = `v${version}`;
+   document.title = `NEMO Deficiencies v${version}`;
 
-  state.configs = configs.configs || [];
-  const savedConfigId = localStorage.getItem(LAST_CONFIG_STORAGE_KEY);
-  const defaultConfigId = configs.defaultConfigId || state.configs[0]?.id || null;
-  state.configId = state.configs.some((config) => config.id === savedConfigId) ? savedConfigId : defaultConfigId;
-  if (state.configId) {
-    localStorage.setItem(LAST_CONFIG_STORAGE_KEY, state.configId);
-  }
-  state.projects = projects.projects || [];
-  state.project = projects.defaultProject || state.projects[0]?.id || "Master Data";
-  state.ruleCatalog = ruleCatalog || { dimensions: [], ruleTypes: [] };
-  state.ruleTemplates = ruleTemplates.templates || [];
+    state.configs = configs.configs || [];
+    const savedConfigId = localStorage.getItem(LAST_CONFIG_STORAGE_KEY);
+    const defaultConfigId = configs.defaultConfigId || state.configs[0]?.id || null;
+    state.configId = state.configs.some((config) => config.id === savedConfigId) ? savedConfigId : defaultConfigId;
+    if (state.configId) {
+      localStorage.setItem(LAST_CONFIG_STORAGE_KEY, state.configId);
+    }
+     
+     // Load projects for the selected config
+     let projectsUrl = "/api/projects";
+     if (state.configId) {
+       projectsUrl += "?configId=" + encodeURIComponent(state.configId);
+     }
+     console.log("Laden von Projekten von:", projectsUrl, "configId:", state.configId);
+     try {
+       const projects = await requestJson(projectsUrl);
+       console.log("Geladene Projekte:", projects.projects?.length || 0, projects.projects);
+       state.projects = projects.projects || [];
+     } catch (error) {
+       console.error("Fehler beim Laden von Projekten, verwende Fallback:", error.message);
+       state.projects = [];
+     }
+     
+     // Determine initial project: last used for this config, or "Master Data", or first available
+     const lastProjectKey = LAST_PROJECT_STORAGE_PREFIX + state.configId;
+     const lastProject = state.configId ? localStorage.getItem(lastProjectKey) : null;
+     const masterDataProject = state.projects.find(p => p.id === "Master Data");
+     state.project = lastProject || (masterDataProject ? masterDataProject.id : state.projects[0]?.id || "Master Data");
+     state.ruleCatalog = ruleCatalog || { dimensions: [], ruleTypes: [] };
+     state.ruleTemplates = ruleTemplates.templates || [];
 
-  renderConfigSelect();
-  renderProjectTabs();
-  await loadAiConfigs();
-  await loadReports();
+   renderConfigSelect();
+   renderProjectTabs();
+   renderProjectSelect();
+   await loadAiConfigs();
+   await loadReports();
 }
 
 function renderConfigSelect() {
@@ -1127,6 +1214,87 @@ function applyAiProviderPreset() {
   elements.aiBaseUrlInput.value = preset.baseUrl;
   elements.aiApiKeyInput.required = preset.keyRequired;
   elements.aiApiKeyInput.placeholder = preset.keyRequired ? "Erforderlich" : "Optional";
+  
+  // Show "Load Models" button only for LiteLLM
+  elements.loadAiModelsBtn.hidden = elements.aiProviderInput.value !== "litellm";
+}
+
+async function loadAiModelsFromLiteLLM() {
+  const baseUrl = elements.aiBaseUrlInput.value.trim();
+  const apiKey = elements.aiApiKeyInput.value.trim();
+  
+  if (!baseUrl) {
+    showToast("Bitte geben Sie eine API-Adresse ein");
+    return;
+  }
+  
+  try {
+    elements.loadAiModelsBtn.disabled = true;
+    elements.loadAiModelsBtn.textContent = "Lade Modelle...";
+    
+    // Remove /v1 suffix if present for models endpoint
+    const modelsUrl = baseUrl.endsWith('/v1') 
+      ? baseUrl.replace('/v1', '') + '/models'
+      : baseUrl.replace('/v1', '') + '/models';
+    
+    console.log("Lade Modelle von:", modelsUrl);
+    
+    const headers = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+    
+    const response = await fetch(modelsUrl, {
+      method: "GET",
+      headers
+    });
+    
+    console.log("Response Status:", response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("API Error Response:", errorText);
+      throw new Error(`API Error: ${response.status} ${response.statusText}\n${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log("Geladene Daten:", data);
+    
+    const models = data.data || [];
+    
+    if (!models.length) {
+      logError("AIModelsLoadWarning", "Keine Modelle verfügbar", { url: modelsUrl });
+      showToast("Keine Modelle verfügbar");
+      return;
+    }
+    
+    // Update datalist with available models
+    const modelSuggestions = document.querySelector("#aiModelSuggestions");
+    modelSuggestions.replaceChildren();
+    for (const model of models) {
+      const option = document.createElement("option");
+      option.value = model.id || model;
+      modelSuggestions.append(option);
+    }
+    
+    // Select first model
+    if (models.length > 0) {
+      elements.aiModelInput.value = models[0].id || models[0];
+    }
+    
+    console.log(`${models.length} Modelle geladen`);
+    showToast(`${models.length} Modelle geladen`);
+  } catch (error) {
+    console.error("Fehler beim Laden der Modelle:", error);
+    logError("AIModelsLoadError", error.message, { 
+      baseUrl: elements.aiBaseUrlInput.value,
+      stack: error.stack
+    });
+    showToast(`Fehler: ${error.message}`);
+  } finally {
+    elements.loadAiModelsBtn.disabled = false;
+    elements.loadAiModelsBtn.textContent = "Verfügbare Modelle laden";
+  }
 }
 
 function closeAiConfigDialog() {
@@ -1585,31 +1753,63 @@ async function createAiConfigFromDialog(event) {
     if (state.aiConfigId) {
       localStorage.setItem(LAST_AI_CONFIG_STORAGE_KEY, state.aiConfigId);
     }
-    await loadAiConfigs();
-    closeAiConfigDialog();
-    showToast("KI-Zugang wurde gespeichert und geprüft");
-  } catch (error) {
-    showToast(error.message);
-  } finally {
-    elements.aiApiKeyInput.value = "";
-    state.creatingAiConfig = false;
-    elements.saveAiConfigBtn.disabled = false;
-    elements.saveAiConfigBtn.textContent = "Speichern und prüfen";
-  }
-}
+     await loadAiConfigs();
+     closeAiConfigDialog();
+     showToast("KI-Zugang wurde gespeichert und geprüft");
+   } catch (error) {
+     showToast(error.message);
+   } finally {
+     elements.aiApiKeyInput.value = "";
+     state.creatingAiConfig = false;
+     elements.saveAiConfigBtn.disabled = false;
+     elements.saveAiConfigBtn.textContent = "Speichern und prüfen";
+   }
+ }
 
-function renderProjectTabs() {
-  elements.projectTabs.replaceChildren();
-  for (const project of state.projects) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = project.name;
-    button.className = project.id === state.project ? "active" : "";
+  async function loadProjectsForConfig() {
+    if (!state.configId) {
+      state.projects = [];
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ configId: state.configId });
+      const url = `/api/projects?${params.toString()}`;
+      console.log("Lade Projekte für Konfiguration von:", url);
+      const payload = await requestJson(url);
+      state.projects = payload.projects || [];
+      console.log("Projekte geladen:", state.projects.length);
+    } catch (error) {
+      state.projects = [];
+      logError("ProjectLoadError", error.message, { configId: state.configId });
+      console.error("Fehler beim Laden der Projekte:", error.message);
+    }
+  }
+
+  function renderProjectSelect() {
+    elements.projectSelect.replaceChildren();
+    for (const project of state.projects) {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      elements.projectSelect.append(option);
+    }
+    elements.projectSelect.value = state.project || "Master Data";
+  }
+
+ function renderProjectTabs() {
+   if (!elements.projectTabs) return; // projectTabs element not present
+   elements.projectTabs.replaceChildren();
+   for (const project of state.projects) {
+     const button = document.createElement("button");
+     button.type = "button";
+     button.textContent = project.name;
+     button.className = project.id === state.project ? "active" : "";
     button.addEventListener("click", async () => {
-      state.project = project.id;
-      clearHarmonization();
-      renderProjectTabs();
-      await loadReports();
+       state.project = project.id;
+       clearHarmonization();
+       renderProjectTabs();
+       renderProjectSelect();
+       await loadReports();
     });
     elements.projectTabs.append(button);
   }
@@ -5799,16 +5999,17 @@ function bindEvents() {
   elements.rejectRuleTemplateCandidateBtn.addEventListener("click", setSelectedRuleTemplateCandidateDecision);
   elements.importSingleRuleTemplateCandidateBtn.addEventListener("click", importSelectedRuleTemplateCandidate);
   elements.openCandidateTemplateBtn.addEventListener("click", openSelectedCandidateTemplate);
-  elements.aiProviderInput.addEventListener("change", applyAiProviderPreset);
-  elements.aiProfileSelect.addEventListener("change", () => {
-    state.aiConfigId = elements.aiProfileSelect.value || null;
-    if (state.aiConfigId) {
-      localStorage.setItem(LAST_AI_CONFIG_STORAGE_KEY, state.aiConfigId);
-    }
-    const profile = state.aiConfigs.find((item) => item.id === state.aiConfigId);
-    elements.aiConnectionState.textContent = profile ? `KI · ${profile.name}` : "KI nicht eingerichtet";
-    showToast(profile ? `KI ${profile.name} ausgewählt` : "Keine KI ausgewählt");
-  });
+   elements.aiProviderInput.addEventListener("change", applyAiProviderPreset);
+   elements.loadAiModelsBtn.addEventListener("click", loadAiModelsFromLiteLLM);
+   elements.aiProfileSelect.addEventListener("change", () => {
+     state.aiConfigId = elements.aiProfileSelect.value || null;
+     if (state.aiConfigId) {
+       localStorage.setItem(LAST_AI_CONFIG_STORAGE_KEY, state.aiConfigId);
+     }
+     const profile = state.aiConfigs.find((item) => item.id === state.aiConfigId);
+     elements.aiConnectionState.textContent = profile ? `KI · ${profile.name}` : "KI nicht eingerichtet";
+     showToast(profile ? `KI ${profile.name} ausgewählt` : "Keine KI ausgewählt");
+   });
   elements.closeAiConfigDialogBtn.addEventListener("click", closeAiConfigDialog);
   elements.cancelAiConfigBtn.addEventListener("click", closeAiConfigDialog);
   elements.aiConfigDialog.addEventListener("cancel", (event) => {
@@ -5846,30 +6047,52 @@ function bindEvents() {
      event.preventDefault();
      closeConfigStatistics();
    });
-  elements.configSelect.addEventListener("change", async () => {
-    state.configId = elements.configSelect.value;
-    state.configStatistics = null;
-    state.projectColumns = {};
-    state.ruleTemplateAnalysis = null;
-    state.selectedRuleTemplateCandidateKey = null;
-    elements.ruleTemplateCandidateDetail.hidden = true;
-    elements.ruleTemplateEditorPanel.hidden = false;
-    elements.saveRuleTemplateBtn.hidden = false;
-    renderRuleTemplateAnalysis();
-    clearHarmonization("Konfiguration gewechselt - Harmonisierung neu laden");
-    state.selectedReport = null;
-    state.reports = [];
-    state.filteredReports = [];
-    clearPreview();
-    clearEditor("Konfiguration gewechselt - Bericht wird neu geladen");
-    renderReports();
-    renderSelection();
-    if (state.configId) {
-      localStorage.setItem(LAST_CONFIG_STORAGE_KEY, state.configId);
-    }
-    await loadReports();
-  });
-  elements.searchInput.addEventListener("input", applyReportFilter);
+   elements.configSelect.addEventListener("change", async () => {
+     state.configId = elements.configSelect.value;
+     state.configStatistics = null;
+     state.projectColumns = {};
+     state.ruleTemplateAnalysis = null;
+     state.selectedRuleTemplateCandidateKey = null;
+     elements.ruleTemplateCandidateDetail.hidden = true;
+     elements.ruleTemplateEditorPanel.hidden = false;
+     elements.saveRuleTemplateBtn.hidden = false;
+     renderRuleTemplateAnalysis();
+     clearHarmonization("Konfiguration gewechselt - Harmonisierung neu laden");
+     state.selectedReport = null;
+       state.reports = [];
+       state.filteredReports = [];
+       clearPreview();
+       clearEditor("Konfiguration gewechselt - Bericht wird neu geladen");
+       renderReports();
+       renderSelection();
+       if (state.configId) {
+         localStorage.setItem(LAST_CONFIG_STORAGE_KEY, state.configId);
+         // Load projects for this config
+         await loadProjectsForConfig();
+         // Load last project for this config, or default to "Master Data"
+         const lastProjectKey = LAST_PROJECT_STORAGE_PREFIX + state.configId;
+         const lastProject = localStorage.getItem(lastProjectKey);
+         const masterDataProject = state.projects.find(p => p.id === "Master Data");
+         state.project = lastProject || (masterDataProject ? masterDataProject.id : state.projects[0]?.id || "Master Data");
+         renderProjectTabs();
+         renderProjectSelect();
+       }
+       await loadReports();
+    });
+   elements.projectSelect.addEventListener("change", async () => {
+     const selectedProject = elements.projectSelect.value;
+     if (selectedProject !== state.project) {
+       state.project = selectedProject;
+       if (state.configId) {
+         const lastProjectKey = LAST_PROJECT_STORAGE_PREFIX + state.configId;
+         localStorage.setItem(lastProjectKey, state.project);
+       }
+       clearHarmonization();
+       renderProjectTabs();
+       await loadReports();
+     }
+   });
+   elements.searchInput.addEventListener("input", applyReportFilter);
   elements.refreshBtn.addEventListener("click", loadReports);
   elements.runBtn.addEventListener("click", runSelectedReport);
   elements.loadEditorBtn.addEventListener("click", loadEditorModel);

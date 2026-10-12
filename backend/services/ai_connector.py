@@ -18,8 +18,9 @@ SUPPORTED_AI_PROVIDERS = {
     "ollama",
     "lmstudio",
     "openai_compatible",
+    "litellm",
 }
-CLOUD_AI_PROVIDERS = {"groq", "openai", "perplexity", "gemini"}
+CLOUD_AI_PROVIDERS = {"groq", "openai", "perplexity", "gemini", "litellm"}
 RULE_DIMENSIONS = [
     "Vollständigkeit",
     "Validität",

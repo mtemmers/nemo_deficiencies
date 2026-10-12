@@ -56,25 +56,25 @@
         </div>
         <div class="sidebar-content">
           <div class="control-band">
-            <label class="field" for="configSelect">
-              <span>Konfiguration</span>
-              <span class="config-select-row">
-                <select id="configSelect"></select>
-                <button id="configStatisticsBtn" class="button secondary config-statistics-button" type="button" title="Statistik erstellen">Statistik</button>
-                <button id="editConfigBtn" class="icon-button config-edit-button" type="button" aria-label="Ausgewählte Konfiguration bearbeiten" title="Ausgewählte Konfiguration bearbeiten">✎</button>
-                <button id="addConfigBtn" class="icon-button config-add-button" type="button" aria-label="Konfiguration anlegen" title="Konfiguration anlegen">+</button>
-              </span>
-            </label>
+             <label class="field" for="configSelect">
+               <span>Konfiguration</span>
+               <span class="config-select-row">
+                 <select id="configSelect"></select>
+                 <button id="configStatisticsBtn" class="button secondary config-statistics-button" type="button" title="Statistik erstellen">Statistik</button>
+                 <button id="editConfigBtn" class="icon-button config-edit-button" type="button" aria-label="Ausgewählte Konfiguration bearbeiten" title="Ausgewählte Konfiguration bearbeiten">✎</button>
+                 <button id="addConfigBtn" class="icon-button config-add-button" type="button" aria-label="Konfiguration anlegen" title="Konfiguration anlegen">+</button>
+               </span>
+             </label>
 
-            <div class="field expert-only">
-              <span>Projekt</span>
-              <div id="projectTabs" class="segmented" role="group" aria-label="Projekt"></div>
-            </div>
+              <label class="field" for="projectSelect">
+                <span>Projekt</span>
+                <select id="projectSelect" aria-label="Projekt auswählen"></select>
+              </label>
 
-            <label class="field" for="searchInput">
-              <span>Suche</span>
-              <input id="searchInput" type="search" autocomplete="off" placeholder="Reportname">
-            </label>
+             <label class="field" for="searchInput">
+               <span>Suche</span>
+               <input id="searchInput" type="search" autocomplete="off" placeholder="Reportname">
+             </label>
 
             <div class="list-tools">
               <span id="reportCount" class="count">0 Reports</span>
@@ -439,18 +439,19 @@
           <span>Bezeichnung</span>
           <input id="aiConfigNameInput" name="name" type="text" value="Groq" required maxlength="120">
         </label>
-        <label class="field" for="aiProviderInput">
-          <span>Anbieter</span>
-          <select id="aiProviderInput" name="provider">
-            <option value="groq">Groq</option>
-            <option value="openai">OpenAI / ChatGPT</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="perplexity">Perplexity</option>
-            <option value="ollama">Ollama lokal</option>
-            <option value="lmstudio">LM Studio lokal</option>
-            <option value="openai_compatible">Eigener OpenAI-kompatibler Dienst</option>
-          </select>
-        </label>
+         <label class="field" for="aiProviderInput">
+           <span>Anbieter</span>
+           <select id="aiProviderInput" name="provider">
+             <option value="groq">Groq</option>
+             <option value="openai">OpenAI / ChatGPT</option>
+             <option value="gemini">Google Gemini</option>
+             <option value="perplexity">Perplexity</option>
+             <option value="litellm">LiteLLM</option>
+             <option value="ollama">Ollama lokal</option>
+             <option value="lmstudio">LM Studio lokal</option>
+             <option value="openai_compatible">Eigener OpenAI-kompatibler Dienst</option>
+           </select>
+         </label>
         <label class="field" for="aiModelInput">
           <span>Modell</span>
           <input id="aiModelInput" name="model" type="text" value="openai/gpt-oss-120b" list="aiModelSuggestions" required maxlength="200">
@@ -466,15 +467,16 @@
           <span>API-Adresse</span>
           <input id="aiBaseUrlInput" name="baseUrl" type="url" value="https://api.groq.com/openai/v1" required maxlength="500">
         </label>
-        <label class="field" for="aiApiKeyInput">
-          <span>API-Key</span>
-          <input id="aiApiKeyInput" name="apiKey" type="password" autocomplete="new-password" maxlength="2048" placeholder="Bei lokalen Diensten optional">
-        </label>
-      </div>
-      <div class="dialog-actions">
-        <button id="cancelAiConfigBtn" class="button secondary" type="button">Abbrechen</button>
-        <button id="saveAiConfigBtn" class="button primary" type="submit">Speichern und prüfen</button>
-      </div>
+         <label class="field" for="aiApiKeyInput">
+           <span>API-Key</span>
+           <input id="aiApiKeyInput" name="apiKey" type="password" autocomplete="new-password" maxlength="2048" placeholder="Bei lokalen Diensten optional">
+         </label>
+         <button id="loadAiModelsBtn" class="button secondary" type="button" hidden>Verfügbare Modelle laden</button>
+       </div>
+       <div class="dialog-actions">
+         <button id="cancelAiConfigBtn" class="button secondary" type="button">Abbrechen</button>
+         <button id="saveAiConfigBtn" class="button primary" type="submit">Speichern und prüfen</button>
+       </div>
     </form>
   </dialog>
 

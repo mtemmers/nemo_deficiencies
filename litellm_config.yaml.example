@@ -1,0 +1,64 @@
+# LiteLLM Configuration File
+# Passen Sie diese Datei an Ihre Anforderungen an
+# Starten Sie LiteLLM mit: litellm --config ./litellm_config.yaml --port 4000
+
+model_list:
+  # OpenAI Modelle (benötigt OPENAI_API_KEY)
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: openai/gpt-3.5-turbo
+      api_key: $OPENAI_API_KEY
+      api_base: https://api.openai.com/v1
+
+  - model_name: gpt-4
+    litellm_params:
+      model: openai/gpt-4
+      api_key: $OPENAI_API_KEY
+      api_base: https://api.openai.com/v1
+
+  # Anthropic Claude (benötigt ANTHROPIC_API_KEY)
+  - model_name: claude-3-opus
+    litellm_params:
+      model: claude-3-opus-20240229
+      api_key: $ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+
+  - model_name: claude-3-sonnet
+    litellm_params:
+      model: claude-3-sonnet-20240229
+      api_key: $ANTHROPIC_API_KEY
+      api_base: https://api.anthropic.com
+
+  # Google Gemini (benötigt GEMINI_API_KEY)
+  - model_name: gemini-pro
+    litellm_params:
+      model: gemini-pro
+      api_key: $GEMINI_API_KEY
+
+  # Ollama lokal (keine API-Keys erforderlich)
+  - model_name: local-llama2
+    litellm_params:
+      model: ollama/llama2
+      api_base: http://localhost:11434/v1
+
+  - model_name: local-mistral
+    litellm_params:
+      model: ollama/mistral
+      api_base: http://localhost:11434/v1
+
+  - model_name: local-neural-chat
+    litellm_params:
+      model: ollama/neural-chat
+      api_base: http://localhost:11434/v1
+
+  # Perplexity API (benötigt PERPLEXITY_API_KEY)
+  - model_name: pplx-7b-online
+    litellm_params:
+      model: perplexity/pplx-7b-online
+      api_key: $PERPLEXITY_API_KEY
+      api_base: https://api.perplexity.ai
+
+# General LiteLLM settings
+general_settings:
+  # master_key: "your-secret-key"  # Für Authentifizierung (optional)
+  # max_tokens: 2000  # Maximum Tokens pro Request
