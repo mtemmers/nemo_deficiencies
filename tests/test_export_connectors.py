@@ -6,7 +6,9 @@ Tests cover:
 - JSON connector output schema
 - MSSQL connector T-SQL output
 - InfoZoom connector text output
-- Condition translator (NEMO → T-SQL, NEMO → English description)
+- InfoZoom connector sdk_native mode (mocked COM)
+- InfoZoom SDK wrapper (mocked COM)
+- Condition translator (NEMO â†’ T-SQL, NEMO â†’ English description)
 - Field cascader helpers
 - API endpoint behaviour (via TestClient)
 """
@@ -57,18 +59,18 @@ def minimal_model() -> Dict[str, Any]:
                 {
                     "id": "group_001",
                     "number": 1,
-                    "title": "Kundennummer Prüfung",
+                    "title": "Kundennummer PrÃ¼fung",
                     "displayName": "Kundennummer",
                     "internalName": "CUSTOMER_ID",
                     "field": "CUSTOMER_ID",
-                    "description": "Prüft ob die Kundennummer vorhanden ist",
-                    "typeHints": ["Vollständigkeit"],
+                    "description": "PrÃ¼ft ob die Kundennummer vorhanden ist",
+                    "typeHints": ["VollstÃ¤ndigkeit"],
                     "rules": [
                         {
                             "id": "group_001_rule_001",
                             "number": 1,
                             "active": True,
-                            "dimension": "Vollständigkeit",
+                            "dimension": "VollstÃ¤ndigkeit",
                             "ruleType": "completeness",
                             "message": "Kundennummer fehlt",
                             "condition": "CUSTOMER_ID IS NULL",
@@ -87,18 +89,18 @@ def minimal_model() -> Dict[str, Any]:
                 {
                     "id": "group_002",
                     "number": 2,
-                    "title": "E-Mail Prüfung",
+                    "title": "E-Mail PrÃ¼fung",
                     "displayName": "E-Mail",
                     "internalName": "EMAIL",
                     "field": "EMAIL",
                     "description": "",
-                    "typeHints": ["Validität"],
+                    "typeHints": ["ValiditÃ¤t"],
                     "rules": [
                         {
                             "id": "group_002_rule_001",
                             "number": 1,
                             "active": True,
-                            "dimension": "Vollständigkeit",
+                            "dimension": "VollstÃ¤ndigkeit",
                             "ruleType": "completeness",
                             "message": "E-Mail fehlt",
                             "condition": "EMAIL IS NULL",
@@ -107,9 +109,9 @@ def minimal_model() -> Dict[str, Any]:
                             "id": "group_002_rule_002",
                             "number": 2,
                             "active": True,
-                            "dimension": "Validität",
+                            "dimension": "ValiditÃ¤t",
                             "ruleType": "regex",
-                            "message": "E-Mail Format ungültig",
+                            "message": "E-Mail Format ungÃ¼ltig",
                             "condition": "EMAIL NOT LIKE '%@%.%'",
                         },
                     ],
@@ -250,7 +252,7 @@ class TestMSSQLConnector:
 
     def test_validate_clean_model(self, minimal_model):
         warnings = self.connector.validate(minimal_model)
-        # minimal_model has no NEMO-specific syntax → no warnings
+        # minimal_model has no NEMO-specific syntax â†’ no warnings
         assert isinstance(warnings, list)
 
     def test_validate_nemo_syntax_produces_warnings(self, model_with_nemo_syntax):
@@ -494,7 +496,7 @@ class TestFieldCascader:
                 "active": True,
                 "condition": "FIELD_A IS NULL",
                 "message": "Field A is required",
-                "dimension": "Vollständigkeit",
+                "dimension": "VollstÃ¤ndigkeit",
             },
             {
                 "active": True,
@@ -506,7 +508,7 @@ class TestFieldCascader:
                 "active": False,
                 "condition": "FIELD_A = 'TEST'",
                 "message": "Test value found",
-                "dimension": "Aktualität",
+                "dimension": "AktualitÃ¤t",
             },
         ]
 
@@ -551,7 +553,7 @@ class TestFieldCascader:
 
     def test_infozoom_cascade_order_note_for_multiple(self):
         text, warnings = self.cascader.build_cascade_infozoom("FIELD_A", self.rules)
-        # Multiple active rules → ordering note
+        # Multiple active rules â†’ ordering note
         assert "order" in text.lower()
 
 
@@ -629,3 +631,351 @@ class TestExportAPIEndpoint:
         content = response.body.decode("utf-8")
         assert "CREATE TABLE" not in content
         assert "INSERT INTO" in content
+
+
+# ---------------------------------------------------------------------------
+# InfoZoom SDK Wrapper â€” mocked COM tests
+# ---------------------------------------------------------------------------
+
+class TestInfoZoomSDKWrapper:
+    """
+    Unit tests for InfoZoomSDKWrapper using a fully mocked win32com environment.
+
+    These tests do NOT require the InfoZoom SDK to be installed; they patch the
+    COM layer with unittest.mock objects.
+
+    The real SDK API (from VBS samples):
+        manager = CreateObject("humanIT.Table2COM.Manager")
+        table   = manager.CreateNew          # property, not method call
+        table.SetRegistryPath("WOW6432Node\\humanIT\\InfoZoom SDK\\9.100")
+        table.Attributes.AddAttribute("Name")
+        table.Attributes.AddExpression("Name_Validation")
+        table.Refresh()
+        table.SaveFileAs("out.fox", "fox", "")
+    """
+
+    def _make_mock_table(self):
+        """Return a mock COM table object with correct API shape."""
+        from unittest.mock import MagicMock
+        mock_table = MagicMock()
+        mock_table.SetRegistryPath = MagicMock(return_value=None)
+        mock_table.Refresh = MagicMock(return_value=None)
+        mock_table.SaveFileAs = MagicMock(return_value=None)
+        mock_table.Attributes = MagicMock()
+        mock_table.Attributes.AddAttribute = MagicMock(return_value=MagicMock())
+        mock_table.Attributes.AddExpression = MagicMock(return_value=MagicMock())
+        return mock_table
+
+    def _make_mock_manager(self, mock_table):
+        """Return a mock COM Manager object whose CreateNew property returns mock_table."""
+        from unittest.mock import MagicMock, PropertyMock
+        mock_manager = MagicMock()
+        # CreateNew is a property on the COM object
+        type(mock_manager).CreateNew = PropertyMock(return_value=mock_table)
+        return mock_manager
+
+    def test_not_installed_raises_without_win32com(self):
+        """When win32com is unavailable, create_document raises InfoZoomSDKNotInstalledError."""
+        from unittest.mock import patch
+        from backend.export_connectors.infozoom_sdk_wrapper import (
+            InfoZoomSDKWrapper,
+            InfoZoomSDKNotInstalledError,
+        )
+
+        with patch("backend.export_connectors.infozoom_sdk_wrapper._HAS_WIN32COM", False):
+            wrapper = InfoZoomSDKWrapper()
+            with pytest.raises(InfoZoomSDKNotInstalledError):
+                wrapper.create_document(
+                    output_path="/tmp/test.fox",
+                    base_attributes=[],
+                    derived_attributes=[],
+                )
+
+    def test_create_document_calls_create_new_and_save(self, tmp_path):
+        """create_document() should call Manager.CreateNew, AddAttribute, AddExpression, Refresh, SaveFileAs."""
+        from unittest.mock import MagicMock, patch, PropertyMock
+        from backend.export_connectors.infozoom_sdk_wrapper import InfoZoomSDKWrapper
+
+        mock_table = self._make_mock_table()
+        mock_manager = self._make_mock_manager(mock_table)
+
+        output_file = tmp_path / "test_output.fox"
+
+        # SaveFileAs must actually create the file for verification
+        from pathlib import Path as _Path
+        def fake_save(path):
+            _Path(path).touch()
+        mock_table.SaveFileAs.side_effect = fake_save
+
+        # Reset cached singleton
+        InfoZoomSDKWrapper._manager_instance = None
+
+        with patch("backend.export_connectors.infozoom_sdk_wrapper._HAS_WIN32COM", True):
+            with patch("backend.export_connectors.infozoom_sdk_wrapper._get_or_create_manager", return_value=mock_manager):
+                wrapper = InfoZoomSDKWrapper()
+
+                result = wrapper.create_document(
+                    output_path=str(output_file),
+                    base_attributes=[{"name": "CUSTOMER_ID"}, {"name": "Name"}],
+                    derived_attributes=[{"name": "CUSTOMER_ID_Validation", "expression": "1. IF ..."}],
+                )
+
+        # Verify API calls
+        assert mock_table.Attributes.AddAttribute.call_count == 2
+        assert mock_table.Attributes.AddExpression.call_count == 1
+        assert mock_table.Refresh.called
+        assert mock_table.SaveFileAs.called
+        assert result == str(output_file)
+        assert output_file.exists()
+
+    def test_sdk_available_reflects_import_flag(self):
+        """sdk_available() should return the current _HAS_WIN32COM value."""
+        from unittest.mock import patch
+        from backend.export_connectors.infozoom_sdk_wrapper import sdk_available, InfoZoomSDKWrapper
+
+        # Reset singleton
+        InfoZoomSDKWrapper._manager_instance = None
+
+        with patch("backend.export_connectors.infozoom_sdk_wrapper._HAS_WIN32COM", True):
+            with patch("backend.export_connectors.infozoom_sdk_wrapper._get_or_create_manager"):
+                assert sdk_available() is True
+
+        # Reset singleton again
+        InfoZoomSDKWrapper._manager_instance = None
+
+        with patch("backend.export_connectors.infozoom_sdk_wrapper._HAS_WIN32COM", False):
+            assert sdk_available() is False
+
+
+# ---------------------------------------------------------------------------
+# InfoZoom Connector â€” sdk_native mode (mocked)
+# ---------------------------------------------------------------------------
+
+class TestInfoZoomConnectorSDKMode:
+    """Tests for the sdk_native export mode, using a mocked SDK wrapper."""
+
+    def setup_method(self):
+        self.connector = InfoZoomExportConnector()
+
+    def test_get_options_schema_includes_mode(self):
+        schema = self.connector.get_options_schema()
+        assert "mode" in schema
+        assert "text_definition" in schema["mode"]["options"]
+
+    def test_validate_sdk_mode_warns_when_not_installed(self, minimal_model):
+        from unittest.mock import patch
+
+        with patch("backend.export_connectors.infozoom_connector.sdk_available", return_value=False):
+            warnings = self.connector.validate(minimal_model, options={"mode": "sdk_native"})
+        assert any("sdk" in w.lower() or "pywin32" in w.lower() for w in warnings)
+
+    def test_validate_sdk_mode_no_extra_warning_when_available(self, minimal_model):
+        from unittest.mock import patch
+
+        with patch("backend.export_connectors.infozoom_connector.sdk_available", return_value=True):
+            warnings = self.connector.validate(minimal_model, options={"mode": "sdk_native"})
+        # No SDK-unavailability warning
+        assert not any("pywin32" in w.lower() for w in warnings)
+
+    def test_export_sdk_native_mode_falls_back_to_text(self, minimal_model):
+        """export() called with sdk_native degrades gracefully to text output."""
+        result = self.connector.export(minimal_model, options={"mode": "sdk_native"})
+        # Should contain the fallback note and still have INFOZOOM content
+        assert "sdk_native" in result or "NOTE" in result
+        assert "INFOZOOM" in result
+
+    def test_export_to_file_raises_when_sdk_not_installed(self, tmp_path, minimal_model):
+        """export_to_file() raises ExportConnectorError when SDK unavailable."""
+        from unittest.mock import patch
+        from backend.export_connectors.base import ExportConnectorError
+        from backend.export_connectors.infozoom_sdk_wrapper import InfoZoomSDKNotInstalledError
+
+        def raise_not_installed(**_kw):
+            raise InfoZoomSDKNotInstalledError("pywin32 not installed")
+
+        with patch(
+            "backend.export_connectors.infozoom_connector.InfoZoomSDKWrapper",
+            side_effect=raise_not_installed,
+        ):
+            with pytest.raises(ExportConnectorError) as exc_info:
+                self.connector.export_to_file(
+                    minimal_model,
+                    output_path=tmp_path / "out.fox",
+                )
+        assert "sdk" in str(exc_info.value).lower() or "infozoom" in str(exc_info.value).lower()
+
+    def test_export_to_file_raises_on_license_error(self, tmp_path, minimal_model):
+        """export_to_file() raises ExportConnectorError on license failure."""
+        from unittest.mock import patch
+        from backend.export_connectors.base import ExportConnectorError
+        from backend.export_connectors.infozoom_sdk_wrapper import InfoZoomLicenseError
+
+        with patch(
+            "backend.export_connectors.infozoom_connector.InfoZoomSDKWrapper",
+            side_effect=InfoZoomLicenseError("bad license"),
+        ):
+            with pytest.raises(ExportConnectorError) as exc_info:
+                self.connector.export_to_file(
+                    minimal_model,
+                    output_path=tmp_path / "out.fox",
+                    options={"license_code": "INVALID"},
+                )
+        assert "lizenz" in str(exc_info.value).lower() or "license" in str(exc_info.value).lower()
+
+    def test_export_to_file_calls_wrapper_create_document(self, tmp_path, minimal_model):
+        """export_to_file() calls create_document on the wrapper with correct args."""
+        from unittest.mock import MagicMock, patch
+        from backend.export_connectors.infozoom_connector import InfoZoomExportConnector
+
+        output_file = tmp_path / "test.fox"
+        output_file.touch()
+
+        mock_wrapper = MagicMock()
+        mock_wrapper.create_document.return_value = output_file
+
+        with patch(
+            "backend.export_connectors.infozoom_connector.InfoZoomSDKWrapper",
+            return_value=mock_wrapper,
+        ):
+            connector = InfoZoomExportConnector()
+            result = connector.export_to_file(
+                minimal_model,
+                output_path=output_file,
+                options={"include_inactive": False},
+            )
+
+        mock_wrapper.create_document.assert_called_once()
+        call_kwargs = mock_wrapper.create_document.call_args
+        # Verify base attributes list was non-empty (minimal_model has 3 attrs)
+        base_attrs = call_kwargs.kwargs.get("base_attributes")
+        if base_attrs is None and len(call_kwargs.args) > 0:
+            base_attrs = call_kwargs.args[0] if len(call_kwargs.args) > 0 else []
+        if base_attrs is None:
+            base_attrs = []
+        assert len(base_attrs) >= 1
+        
+        # Verify derived attributes were passed
+        derived_attrs = call_kwargs.kwargs.get("derived_attributes")
+        if derived_attrs is None and len(call_kwargs.args) > 1:
+            derived_attrs = call_kwargs.args[1]
+        if derived_attrs is None:
+            derived_attrs = []
+        assert isinstance(derived_attrs, list)
+        
+        assert result == output_file
+
+    def test_export_to_file_excludes_inactive_rules_by_default(self, tmp_path, minimal_model):
+        """Inactive rules should not appear in derived attribute expressions."""
+        from unittest.mock import MagicMock, patch
+
+        output_file = tmp_path / "test.fox"
+        output_file.touch()
+        mock_wrapper = MagicMock()
+        mock_wrapper.create_document.return_value = output_file
+
+        with patch(
+            "backend.export_connectors.infozoom_connector.InfoZoomSDKWrapper",
+            return_value=mock_wrapper,
+        ):
+            self.connector.export_to_file(
+                minimal_model,
+                output_path=output_file,
+            )
+
+        call_kwargs = mock_wrapper.create_document.call_args
+        derived_attrs = call_kwargs.kwargs.get("derived_attributes") or []
+        # Inactive rule message "Kundennummer hat Leerzeichen" should not appear
+        all_expressions = " ".join(d.get("expression", "") for d in derived_attrs)
+        assert "Kundennummer hat Leerzeichen" not in all_expressions
+
+    def test_export_to_file_includes_inactive_when_option_set(self, tmp_path, minimal_model):
+        """With include_inactive=True, inactive rules appear in derived expressions."""
+        from unittest.mock import MagicMock, patch
+
+        output_file = tmp_path / "test.fox"
+        output_file.touch()
+        mock_wrapper = MagicMock()
+        mock_wrapper.create_document.return_value = output_file
+
+        with patch(
+            "backend.export_connectors.infozoom_connector.InfoZoomSDKWrapper",
+            return_value=mock_wrapper,
+        ):
+            self.connector.export_to_file(
+                minimal_model,
+                output_path=output_file,
+                options={"include_inactive": True},
+            )
+
+        call_kwargs = mock_wrapper.create_document.call_args
+        derived_attrs = call_kwargs.kwargs.get("derived_attributes") or []
+        all_expressions = " ".join(d.get("expression", "") for d in derived_attrs)
+        assert "Kundennummer hat Leerzeichen" in all_expressions
+
+
+# ---------------------------------------------------------------------------
+# API endpoint â€” sdk_native binary path
+# ---------------------------------------------------------------------------
+
+class TestExportAPIEndpointSDKNative:
+    """Tests for the binary sdk_native export path in the API endpoint."""
+
+    def test_export_infozoom_sdk_native_streams_fox(self, minimal_model):
+        """When sdk_native mode is requested, the endpoint returns application/octet-stream (.fox)."""
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from pathlib import Path
+        from backend.main import export_editor_model, EditorExportRequest
+
+        fdb_content = b"FAKE_FDB_BINARY_CONTENT"
+
+        # Mock out the entire export_to_file call path
+        def mock_export_to_file(model, output_path, options=None):
+            Path(output_path).write_bytes(fdb_content)
+            return Path(output_path)
+
+        mock_connector = MagicMock()
+        mock_connector.validate.return_value = []
+        mock_connector.export_to_file.side_effect = mock_export_to_file
+
+        with patch(
+            "backend.main.get_connector",
+            return_value=mock_connector,
+        ):
+            request = EditorExportRequest(
+                editorModel=minimal_model,
+                format="infozoom",
+                options={"mode": "sdk_native"},
+            )
+            response = export_editor_model("TEST_REPORT", request)
+
+        assert response.media_type == "application/octet-stream"
+        assert response.body == fdb_content
+        assert "x-export-format" in {k.lower() for k in response.headers.keys()}
+        assert response.headers.get("X-Export-Format") == "infozoom_sdk_native"
+
+    def test_export_infozoom_sdk_native_filename_has_fox_extension(self, minimal_model):
+        """The Content-Disposition header should advertise a .fox filename."""
+        import tempfile
+        from unittest.mock import MagicMock, patch
+        from pathlib import Path
+        from backend.main import export_editor_model, EditorExportRequest
+
+        def mock_export_to_file(model, output_path, options=None):
+            Path(output_path).write_bytes(b"data")
+            return Path(output_path)
+
+        mock_connector = MagicMock()
+        mock_connector.validate.return_value = []
+        mock_connector.export_to_file.side_effect = mock_export_to_file
+
+        with patch("backend.main.get_connector", return_value=mock_connector):
+            request = EditorExportRequest(
+                editorModel=minimal_model,
+                format="infozoom",
+                options={"mode": "sdk_native"},
+            )
+            response = export_editor_model("TEST_REPORT", request)
+
+        disposition = response.headers.get("Content-Disposition", "")
+        assert ".fox" in disposition

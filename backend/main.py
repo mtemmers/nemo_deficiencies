@@ -1978,10 +1978,15 @@ def export_editor_model(report_ref: str, request: EditorExportRequest) -> Respon
     Body:
         editorModel: The full editor model dict
         format:      Connector name, e.g. "mssql", "json", "infozoom"
-        options:     Format-specific options dict
+        options:     Format-specific options dict.
+                     For infozoom with mode="sdk_native", the connector's
+                     export_to_file() is called and the binary .fdb file is
+                     streamed back.
 
-    Returns a file download response with warnings embedded in the content.
+    Returns a file download response with warnings embedded as headers.
     """
+    import tempfile
+
     try:
         connector = get_connector(request.format)
     except KeyError:
@@ -1992,14 +1997,9 @@ def export_editor_model(report_ref: str, request: EditorExportRequest) -> Respon
         )
 
     model = normalize_editor_model(dict(request.editor_model))
+    options = dict(request.options)
 
-    try:
-        warnings = connector.validate(model)
-        content = connector.export(model, options=dict(request.options))
-    except ExportConnectorError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    # Build download filename from report info
+    # Build download filename stem from report info
     report = model.get("report") or {}
     raw_name = (
         report.get("internalName")
@@ -2009,6 +2009,75 @@ def export_editor_model(report_ref: str, request: EditorExportRequest) -> Respon
         or "nemo_export"
     )
     stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw_name)).strip("._") or "nemo_export"
+
+    groups = ((model.get("checks") or {}).get("groups") or [])
+    all_rules = [r for g in groups for r in (g.get("rules") or [])]
+
+    # ------------------------------------------------------------------ #
+    # SDK native binary path (InfoZoom .fdb)                              #
+    # ------------------------------------------------------------------ #
+    mode = str(options.get("mode") or "")
+    if request.format == "infozoom" and mode == "sdk_native":
+        try:
+            warnings = connector.validate(model, options=options)
+        except ExportConnectorError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        # Write to temp file, then stream it back
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".fox", prefix="nemo_infozoom_")
+        os.close(tmp_fd)
+        # Remove temp file first — InfoZoom SDK creates it fresh via SaveFileAs
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        try:
+            try:
+                written_path = connector.export_to_file(model, output_path=tmp_path, options=options)
+            except ExportConnectorError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            except AttributeError:
+                raise HTTPException(
+                    status_code=501,
+                    detail=(
+                        "Der InfoZoom-Connector unterstützt export_to_file() nicht. "
+                        "Bitte die Anwendung aktualisieren."
+                    ),
+                )
+
+            filename = f"{stem}.fox"
+            response_headers = {
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Export-Format": "infozoom_sdk_native",
+                "X-Export-Warnings": str(len(warnings)),
+                "X-Export-Total-Rules": str(len(all_rules)),
+            }
+
+            # Read file contents and return as Response (file may be large,
+            # but InfoZoom .fdb files are typically small enough to buffer)
+            with open(written_path, "rb") as fh:
+                content_bytes = fh.read()
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        return Response(
+            content=content_bytes,
+            media_type="application/octet-stream",
+            headers=response_headers,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Standard text/string export path                                    #
+    # ------------------------------------------------------------------ #
+    try:
+        warnings = connector.validate(model)
+        content = connector.export(model, options=options)
+    except ExportConnectorError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     ext = connector.file_extension
     filename = f"{stem}.{ext}" if not stem.lower().endswith(f".{ext}") else stem
 
@@ -2020,11 +2089,7 @@ def export_editor_model(report_ref: str, request: EditorExportRequest) -> Respon
     }
     media_type = media_types.get(request.format, "text/plain; charset=utf-8")
 
-    # Encode as bytes (UTF-8)
     content_bytes = content.encode("utf-8")
-
-    groups = ((model.get("checks") or {}).get("groups") or [])
-    all_rules = [r for g in groups for r in (g.get("rules") or [])]
 
     response_headers = {
         "Content-Disposition": f'attachment; filename="{filename}"',

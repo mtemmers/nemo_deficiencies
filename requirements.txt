@@ -4,3 +4,4 @@ cryptography>=42
 requests>=2.32
 nemo_library==1.6.63
 pandas
+pywin32>=306; sys_platform == "win32"

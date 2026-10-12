@@ -1,9 +1,12 @@
 """
 InfoZoom Export Connector.
 
-Generates a text-format definition file for manual import into InfoZoom.
+Supports two export modes:
 
-The output has two sections:
+**text_definition** (default)
+    Generates a text-format definition file for manual import into InfoZoom.
+    No SDK required.  Output has two sections:
+
     1. **Structure** – lists every source attribute (base columns) from
        ``source.attributes[]``.
     2. **Derived Attributes** – one derived attribute per check group,
@@ -11,7 +14,18 @@ The output has two sections:
        description.  These map to InfoZoom derived fields that show
        a validation summary per field.
 
-Output example::
+**sdk_native**
+    Uses the InfoZoom SDK COM API (pywin32) to create a binary ``.fdb``
+    document that can be opened directly in InfoZoom.  Requires:
+
+    - InfoZoom SDK 9.100 installed (``InfoZoom_SDK_x64_2026_de-DE.exe``)
+    - ``pywin32`` Python package (``pip install pywin32``)
+    - License code in ``INFOZOOM_LICENSE_CODE`` environment variable
+
+    The ``export()`` method is not available for this mode; use
+    ``export_to_file()`` instead.  The API endpoint handles the routing.
+
+Output example (text_definition)::
 
     ================================================================================
     INFOZOOM STRUCTURE DEFINITION
@@ -35,50 +49,126 @@ Output example::
     ================================================================================
 
 Options:
+    mode:             "text_definition" (default) | "sdk_native"
     include_inactive: bool (default False) – include inactive rules in output
+    license_code:     Override INFOZOOM_LICENSE_CODE env var (sdk_native mode only)
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from backend.export_connectors.base import ExportConnector
+from backend.export_connectors.base import ExportConnector, ExportConnectorError
 from backend.export_connectors import register_connector
 from backend.export_connectors.utils.field_cascader import FieldCascader
+from backend.export_connectors.infozoom_sdk_wrapper import (
+    InfoZoomSDKWrapper,
+    InfoZoomSDKError,
+    InfoZoomSDKNotInstalledError,
+    InfoZoomLicenseError,
+    FOX_EXTENSION,
+    sdk_available,
+)
 
+log = logging.getLogger(__name__)
 _cascader = FieldCascader()
+
+_MODE_TEXT = "text_definition"
+_MODE_SDK = "sdk_native"
 
 
 class InfoZoomExportConnector(ExportConnector):
     name = "infozoom"
     display_name = "InfoZoom (Struktur + Validierungsattribute)"
-    description = "Exportiert Feldstruktur und Validierungsregeln als InfoZoom-Textdefinition für manuellen Import."
-    version = "1.0"
-    file_extension = "txt"
+    description = "Exportiert Feldstruktur und Validierungsregeln als InfoZoom-Textdefinition oder natives .fox-Dokument."
+    version = "2.0"
+    file_extension = "txt"  # sdk_native exports use .fox, set directly by the API endpoint
 
     def get_options_schema(self) -> Dict[str, Any]:
-        return {
+        mode_options = [_MODE_TEXT]
+        if sdk_available():
+            mode_options.append(_MODE_SDK)
+
+        schema: Dict[str, Any] = {
+            "mode": {
+                "type": "select",
+                "label": "Export-Modus",
+                "options": mode_options,
+                "default": _MODE_TEXT,
+                "descriptions": {
+                    _MODE_TEXT: "Textdefinition für manuellen Import (kein SDK erforderlich)",
+                    _MODE_SDK: "Natives InfoZoom .fox-Dokument via SDK (SDK + Lizenz erforderlich)",
+                },
+            },
             "include_inactive": {
                 "type": "checkbox",
                 "label": "Inaktive Regeln einschließen",
                 "default": False,
-            }
+            },
         }
+        if sdk_available():
+            schema["license_code"] = {
+                "type": "password",
+                "label": "InfoZoom Lizenzcode (überschreibt INFOZOOM_LICENSE_CODE)",
+                "default": "",
+                "placeholder": "V3559-XXXXX-XXXXX-XXXXX-XXXXX",
+            }
+        return schema
 
-    def validate(self, model: Dict[str, Any]) -> List[str]:
+    def validate(self, model: Dict[str, Any], options: Optional[Dict[str, Any]] = None) -> List[str]:
         warnings: list[str] = []
+        opts = options or {}
+        mode = str(opts.get("mode") or _MODE_TEXT)
+
         groups = ((model.get("checks") or {}).get("groups") or [])
         if not groups:
             warnings.append("No check groups found in model – output will have no derived attributes.")
         source_attrs = ((model.get("source") or {}).get("attributes") or [])
         if not source_attrs:
             warnings.append("No source attributes found – base attribute section will be empty.")
+
+        if mode == _MODE_SDK:
+            if not sdk_available():
+                warnings.append(
+                    "SDK mode requested but pywin32 is not installed. "
+                    "Run: pip install pywin32"
+                )
+            # We don't try to activate the license here to avoid side effects;
+            # that happens lazily in export_to_file().
+
         return warnings
 
     def export(self, model: Dict[str, Any], options: Dict[str, Any] | None = None) -> str:
+        """
+        Export the model as a text definition (mode=text_definition).
+
+        For sdk_native mode, call export_to_file() instead.  If sdk_native
+        is requested here it falls back to text_definition with a warning
+        header so the existing API endpoint remains functional.
+        """
         options = options or {}
+        mode = str(options.get("mode") or _MODE_TEXT)
+
+        if mode == _MODE_SDK:
+            # Caller should use export_to_file(); we degrade gracefully here.
+            log.warning(
+                "InfoZoomExportConnector.export() called with mode='sdk_native'. "
+                "Use export_to_file() for binary output. Falling back to text_definition."
+            )
+            header = (
+                "# NOTE: sdk_native mode requested but export() returns text only.\n"
+                "# Use export_to_file() for a binary .fdb file.\n\n"
+            )
+            return header + self._export_text(model, options)
+
+        return self._export_text(model, options)
+
+    def _export_text(self, model: Dict[str, Any], options: Dict[str, Any]) -> str:
+        """Render the text-format InfoZoom structure definition."""
         include_inactive = bool(options.get("include_inactive", False))
 
         report = model.get("report") or {}
@@ -97,7 +187,7 @@ class InfoZoomExportConnector(ExportConnector):
             "INFOZOOM STRUCTURE DEFINITION",
             f"Report: {report_name}",
             f"Generated: {timestamp}",
-            "Generator: nemo_deficiencies InfoZoom export connector v1.0",
+            "Generator: nemo_deficiencies InfoZoom export connector v2.0",
             "=" * 80,
             "",
         ])
@@ -130,21 +220,8 @@ class InfoZoomExportConnector(ExportConnector):
         all_warnings: list[str] = []
 
         for group in groups:
-            field = str(group.get("internalName") or group.get("field") or "").strip()
-            display_name = str(group.get("displayName") or group.get("title") or field or "").strip()
-            rules = group.get("rules") or []
-
-            if include_inactive:
-                effective_rules = rules
-            else:
-                effective_rules = [r for r in rules if r.get("active")]
-
-            attr_name = f"{field}_Validation" if field else f"Group_{group.get('number', '?')}_Validation"
-
-            cascade_text, warnings = _cascader.build_cascade_infozoom(
-                field=field or display_name,
-                rules=effective_rules,
-                active_only=False,  # caller has already applied the filter above
+            field, display_name, attr_name, cascade_text, warnings = self._build_group_cascade(
+                group, include_inactive
             )
             all_warnings.extend(warnings)
 
@@ -189,6 +266,132 @@ class InfoZoomExportConnector(ExportConnector):
     @staticmethod
     def _clean(value: str) -> str:
         return re.sub(r"\s+", " ", str(value or "")).strip()
+
+    @staticmethod
+    def _build_group_cascade(
+        group: Dict[str, Any],
+        include_inactive: bool,
+    ) -> tuple[str, str, str, str, list[str]]:
+        """
+        Process a single check group into cascade components.
+
+        Returns
+        -------
+        tuple of (field, display_name, attr_name, cascade_text, warnings)
+        """
+        field = str(group.get("internalName") or group.get("field") or "").strip()
+        display_name = str(group.get("displayName") or group.get("title") or field or "").strip()
+        rules = group.get("rules") or []
+
+        effective_rules = rules if include_inactive else [r for r in rules if r.get("active")]
+        attr_name = (
+            f"{field}_Validation" if field else f"Group_{group.get('number', '?')}_Validation"
+        )
+
+        cascade_text, warnings = _cascader.build_cascade_infozoom(
+            field=field or display_name,
+            rules=effective_rules,
+            active_only=False,  # caller has already applied the active filter above
+        )
+        return field, display_name, attr_name, cascade_text, warnings
+
+    # ------------------------------------------------------------------
+    # SDK Native export
+    # ------------------------------------------------------------------
+
+    def export_to_file(
+        self,
+        model: Dict[str, Any],
+        output_path: str | Path,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Path:
+        """
+        Create a native InfoZoom .fdb document using the SDK.
+
+        Parameters
+        ----------
+        model:
+            Normalised editor model dict (checks.groups, source.attributes, …).
+        output_path:
+            Destination path for the .fdb file.  Parent directory is created
+            if it does not exist.
+        options:
+            Export options.  Recognised keys:
+            - ``include_inactive`` (bool, default False)
+            - ``license_code`` (str) – overrides ``INFOZOOM_LICENSE_CODE`` env var
+
+        Returns
+        -------
+        Path
+            Resolved path of the written .fdb file.
+
+        Raises
+        ------
+        ExportConnectorError
+            Wraps ``InfoZoomSDKNotInstalledError``, ``InfoZoomLicenseError``,
+            and ``InfoZoomSDKError`` with user-friendly messages.
+        """
+        options = options or {}
+        include_inactive = bool(options.get("include_inactive", False))
+        license_code = str(options.get("license_code") or "").strip() or None
+
+        report = model.get("report") or {}
+        report_name = str(
+            report.get("displayName") or report.get("internalName") or report.get("id") or "Unnamed"
+        )
+        source_attrs = ((model.get("source") or {}).get("attributes") or [])
+        groups = ((model.get("checks") or {}).get("groups") or [])
+
+        # Build base attributes list
+        base_attrs: List[Dict[str, Any]] = []
+        for attr in source_attrs:
+            name = str(attr.get("name") or "").strip()
+            if not name:
+                continue
+            comment = str(attr.get("comment") or attr.get("displayName") or "").strip()
+            base_attrs.append({"name": name, "comment": comment})
+
+        # Build derived attributes list (one per check group)
+        derived_attrs: List[Dict[str, Any]] = []
+        for group in groups:
+            field, display_name, attr_name, cascade_text, _ = self._build_group_cascade(
+                group, include_inactive
+            )
+            derived_attrs.append({
+                "name": attr_name,
+                "expression": cascade_text,
+                "source": field or display_name,
+            })
+
+        # Initialise SDK wrapper — raises ExportConnectorError on failure
+        try:
+            wrapper = InfoZoomSDKWrapper()
+        except InfoZoomSDKNotInstalledError as exc:
+            raise ExportConnectorError(
+                f"InfoZoom SDK nicht verfügbar: {exc}\n"
+                "Bitte das InfoZoom SDK installieren (InfoZoom_SDK_x64_2026_de-DE.exe) "
+                "und 'pip install pywin32' ausführen."
+            ) from exc
+        except InfoZoomLicenseError as exc:
+            raise ExportConnectorError(
+                f"InfoZoom Lizenzfehler: {exc}\n"
+                "Bitte den Lizenzcode in der Umgebungsvariable INFOZOOM_LICENSE_CODE "
+                "oder in den Export-Optionen angeben."
+            ) from exc
+
+        # Create the document
+        try:
+            written_path = wrapper.create_document(
+                output_path=output_path,
+                base_attributes=base_attrs,
+                derived_attributes=derived_attrs,
+            )
+        except InfoZoomSDKError as exc:
+            raise ExportConnectorError(
+                f"InfoZoom SDK Fehler beim Erstellen des Dokuments: {exc}"
+            ) from exc
+
+        return written_path
 
 
 register_connector("infozoom", InfoZoomExportConnector)
