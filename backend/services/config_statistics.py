@@ -1,12 +1,24 @@
 from typing import Any, Dict, Iterable
 
 
+def _rule_detail(rule: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(rule.get("id") or ""),
+        "message": str(rule.get("message") or ""),
+        "condition": str(rule.get("condition") or ""),
+        "dimension": str(rule.get("dimension") or ""),
+        "ruleType": str(rule.get("ruleType") or ""),
+        "active": bool(rule.get("active")),
+    }
+
+
 def build_config_statistics(
     report_models: Iterable[Dict[str, Any]],
     skipped_reports: Iterable[Dict[str, Any]] = (),
 ) -> Dict[str, Any]:
     reports = []
     distinct_fields = set()
+    dimension_counts: Dict[str, int] = {}
 
     for item in report_models:
         report = dict(item.get("report") or {})
@@ -14,6 +26,7 @@ def build_config_statistics(
         groups = list(((model.get("checks") or {}).get("groups") or []))
         rule_count = 0
         active_rule_count = 0
+        group_details = []
 
         for group in groups:
             field_name = str(
@@ -28,6 +41,21 @@ def build_config_statistics(
             rules = list(group.get("rules") or [])
             rule_count += len(rules)
             active_rule_count += sum(1 for rule in rules if bool(rule.get("active")))
+            rule_details = [_rule_detail(rule) for rule in rules]
+            for rule in rule_details:
+                dimension = rule["dimension"] or "Ohne Typ"
+                dimension_counts[dimension] = dimension_counts.get(dimension, 0) + 1
+            group_details.append(
+                {
+                    "id": str(group.get("id") or ""),
+                    "displayName": str(group.get("displayName") or group.get("title") or field_name),
+                    "internalName": str(group.get("internalName") or group.get("field") or ""),
+                    "description": str(group.get("description") or ""),
+                    "ruleCount": len(rule_details),
+                    "activeRuleCount": sum(1 for rule in rule_details if rule["active"]),
+                    "rules": rule_details,
+                }
+            )
 
         report_id = str(
             report.get("internalName")
@@ -45,6 +73,7 @@ def build_config_statistics(
                 "ruleCount": rule_count,
                 "activeRuleCount": active_rule_count,
                 "inactiveRuleCount": rule_count - active_rule_count,
+                "groups": group_details,
             }
         )
 
@@ -65,6 +94,7 @@ def build_config_statistics(
             "draftReportCount": sum(1 for item in reports if item["source"] == "draft"),
             "skippedReportCount": len(skipped),
         },
+        "dimensions": [{"name": name, "count": count} for name, count in sorted(dimension_counts.items())],
         "reports": reports,
         "skippedReports": skipped,
     }

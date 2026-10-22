@@ -57,7 +57,7 @@ def sample_payload() -> dict:
         "configTenant": "test",
         "project": "Master Data",
         "generatedAt": "2026-09-07T10:30:00Z",
-        "appVersion": "1.6.1",
+        "appVersion": "1.7.0",
         **statistics,
     }
 

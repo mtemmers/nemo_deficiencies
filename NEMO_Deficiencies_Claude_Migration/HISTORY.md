@@ -6,6 +6,8 @@
 
 2026-07 bis 2026-08 - Ausbau zur lokalen Webanwendung - FastAPI-Backend, lokale Browseroberflaeche, Startskripte, Config-Auswahl, Reportauswahl, Editor-Grundlagen und SQL-Modell/Generator entstanden.
 
+2026-10-22 - Release-Stand 1.7.0 - Minor-Release mit InfoZoom-/MSSQL-Export, Export-Connectoren, Regelwerksbericht und LiteLLM. Alle 167 Tests bestanden (u. a. Statistik-Gruppendetails und Frontend-Export-Dropdown repariert). Installer, portables ZIP und Wheel gebaut; Portable-Start mit Health-Version 1.7.0 geprueft.
+
 2026-08-10 - Release-Stand 1.6.1 - README, QUICKSTART, Release Notes und lokale Release-Artefakte dokumentieren Version `1.6.1`. Anwenderstart bevorzugt per Portable-ZIP ohne Python-Installation.
 
 2026-08-10 - Sicherheitsbereinigung - Klartext-INIs, Entwicklungsdatenbanken, lokale Schluessel und alte Release-Artefakte wurden aus dem Projekt entfernt. Laufzeitdaten wurden verbindlich nach `%LOCALAPPDATA%\NEMO Deficiencies\` verlagert. Restrisiko frueherer Git-Historie wurde dokumentiert; Passwortrotation empfohlen.

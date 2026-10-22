@@ -17,7 +17,8 @@
 - `QUICKSTART.md` - kompakter Anwenderstart und Sicherheitsregeln. Fuer Claude wichtig.
 - `Plan.md` - zentrale Projektsteuerung und Aufgabenliste mit Stand 10.08.2026. Fuer Claude sehr wichtig.
 - `Plan-PRO-CL00351.md` - neuerer/alternativer Planstand mit Regelwerksbericht und Stand 07.09.2026. Fuer Claude sehr wichtig.
-- `RELEASE_NOTES_v1.6.1.md` - Release Notes fuer Version 1.6.1. Fuer Claude wichtig.
+- `RELEASE_NOTES_v1.7.0.md` - Release Notes fuer Version 1.7.0. Fuer Claude wichtig.
+- `RELEASE_NOTES_v1.6.1.md` - Release Notes fuer Version 1.6.1 (Vorgaenger).
 - `pyproject.toml` - Paket- und Abhaengigkeitsdefinition des Hauptstands. Fuer Claude wichtig.
 - `pyproject-PRO-CL00351.toml` - PRO-Stand mit zusaetzlichen Exportabhaengigkeiten. Fuer Claude wichtig.
 - `requirements.txt` - Runtime-Abhaengigkeiten Hauptstand. Fuer Claude wichtig.
@@ -32,7 +33,7 @@
 
 ## Backend
 
-- `backend/__init__.py` - Paketversion, aktuell `1.6.1`.
+- `backend/__init__.py` - Paketversion, aktuell `1.7.0`.
 - `backend/main.py` - zentrale FastAPI-App im Hauptstand.
 - `backend/main-PRO-CL00351.py` - PRO-Variante; wichtig fuer Merge-Pruefung.
 - `backend/cli.py` - Kommandozeilenstart.

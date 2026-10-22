@@ -2,15 +2,17 @@
 
 NEMO Deficiencies ist eine lokale Python-Webanwendung zur grafischen Bearbeitung von `(DEFICIENCIES)`-Berichten auf Basis der `nemo_library`. Das vorhandene CLI-Skript `nemo_import_export.py` bleibt fuer Index-, SQL- und Datenexporte enthalten.
 
-Aktuelle Version: **1.6.1**
+Aktuelle Version: **1.7.0**
+
+Neu in 1.7.0: Export über InfoZoom-SDK (`.fox`), MSSQL-Export (T-SQL), Export-Connectoren mit automatischer Erkennung, persistenter Übersetzungscache für Regelmeldungen, LiteLLM als KI-Anbieter, Regelwerksbericht (PDF/Excel) sowie Projektauswahl und Fehlerprotokoll für LiteLLM-Modelle. Details: [RELEASE_NOTES_v1.7.0.md](RELEASE_NOTES_v1.7.0.md).
 
 Für den schnellsten Einstieg siehe [QUICKSTART.md](QUICKSTART.md).
 
 ## Empfohlener Start für Anwender
 
-Für Version 1.6.1 ist die Portable-Version der einfachste Weg. Eine Python-Installation ist nicht erforderlich:
+Für Version 1.7.0 ist die Portable-Version der einfachste Weg. Eine Python-Installation ist nicht erforderlich:
 
-1. Unter GitHub **Releases** `NEMO-Deficiencies-1.6.1-portable.zip` herunterladen.
+1. Unter GitHub **Releases** `NEMO-Deficiencies-1.7.0-portable.zip` herunterladen.
 2. Das ZIP vollständig in einen eigenen Ordner entpacken.
 3. `NEMO Deficiencies.exe` starten.
 4. Die Konfiguration über das Plus-Symbol in der Weboberfläche anlegen.
@@ -27,11 +29,11 @@ Persönliche Daten, verschlüsselte Zugangsdaten und Logs bleiben unabhängig vo
 %LOCALAPPDATA%\NEMO Deficiencies\
 ```
 
-Der aktuelle lokale Release enthält das portable ZIP, ein Python-Wheel und `SHA256SUMS.txt`. Ein Installer kann mit dem dokumentierten Release-Skript zusätzlich erzeugt werden.
+Der Release 1.7.0 enthält das portable ZIP, ein Python-Wheel und `SHA256SUMS.txt`. Ein Installer kann mit dem dokumentierten Release-Skript zusätzlich erzeugt werden.
 
 ### Einfacher Start der Portable-Version
 
-1. `NEMO-Deficiencies-<Version>-portable.zip` vollständig in einen eigenen Ordner entpacken.
+1. `NEMO-Deficiencies-1.7.0-portable.zip` vollständig in einen eigenen Ordner entpacken.
 2. `NEMO Deficiencies.exe` starten.
 3. In der Hauptseite eine Konfiguration anlegen oder auswählen.
 4. In der Kopfzeile **CLI-Wizard** öffnen.
@@ -132,7 +134,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Im Projektordner genügt:
 
 ```powershell
-.\scripts\publish-release.ps1 -Version 1.6.1
+.\scripts\publish-release.ps1 -Version 1.7.0
 ```
 
 Der Ablauf:
@@ -140,7 +142,7 @@ Der Ablauf:
 1. `backend/__init__.py` wird auf die angegebene Version gesetzt.
 2. Alle Tests werden ausgeführt.
 3. Git zeigt alle Dateien, die in den Release aufgenommen werden.
-4. Nach Bestätigung werden Commit und Tag `v1.6.1` erstellt und übertragen.
+4. Nach Bestätigung werden Commit und Tag `v1.7.0` erstellt und übertragen.
 5. GitHub Actions baut automatisch Installer, portables ZIP, Wheel und Prüfsummen.
 6. GitHub veröffentlicht die Dateien unter **Releases**.
 
@@ -149,7 +151,7 @@ Das Skript nimmt alle in der Git-Übersicht angezeigten Änderungen in den Relea
 Optional kann vor dem Push zusätzlich lokal gebaut werden:
 
 ```powershell
-.\scripts\publish-release.ps1 -Version 1.6.1 -BuildLocal
+.\scripts\publish-release.ps1 -Version 1.7.0 -BuildLocal
 ```
 
 ### Installer nur lokal bauen
@@ -170,9 +172,9 @@ Das Skript installiert fehlende Build-Werkzeuge, führt die Tests aus und schrei
 
 ```text
 release\
-├─ NEMO-Deficiencies-Setup-<Version>.exe
-├─ NEMO-Deficiencies-<Version>-portable.zip
-├─ nemo_deficiencies-<Version>-py3-none-any.whl
+├─ NEMO-Deficiencies-Setup-1.7.0.exe
+├─ NEMO-Deficiencies-1.7.0-portable.zip
+├─ nemo_deficiencies-1.7.0-py3-none-any.whl
 └─ SHA256SUMS.txt
 ```
 

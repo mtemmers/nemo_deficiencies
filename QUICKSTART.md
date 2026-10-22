@@ -1,8 +1,8 @@
 # NEMO Deficiencies: Schnellstart
 
-## Empfohlen: Portable-Version 1.6.1
+## Empfohlen: Portable-Version 1.7.0
 
-1. Unter GitHub **Releases** `NEMO-Deficiencies-1.6.1-portable.zip` herunterladen.
+1. Unter GitHub **Releases** `NEMO-Deficiencies-1.7.0-portable.zip` herunterladen.
 2. Das ZIP vollständig in einen eigenen Ordner entpacken.
 3. `NEMO Deficiencies.exe` starten.
 4. Neben der Config-Auswahl auf **+** klicken und Tenant, User-ID sowie Passwort eintragen.
@@ -45,7 +45,7 @@ nemo-deficiencies
 Im Projektordner:
 
 ```powershell
-.\scripts\publish-release.ps1 -Version 1.6.1
+.\scripts\publish-release.ps1 -Version 1.7.0
 ```
 
 Nach der Bestätigung erzeugt GitHub automatisch den neuen Release samt Windows-Installer.

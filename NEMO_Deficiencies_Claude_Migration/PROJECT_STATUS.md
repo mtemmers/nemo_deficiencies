@@ -8,7 +8,7 @@ Ziel ist eine lokale, sichere und anwenderfreundliche Python-/FastAPI-Webanwendu
 
 ## Aktueller Stand
 
-Die Anwendung ist als Version `1.6.1` dokumentiert und paketiert. Sie laeuft lokal auf Port `8000`, nutzt verschluesselte Konfigurationen unter `%LOCALAPPDATA%\NEMO Deficiencies\` und enthaelt eine Weboberflaeche fuer Config-Auswahl, Reportauswahl, Editor, CLI-Wizard, KI-Zugang, Statistik/Harmonisierung und Regelwerksausgaben.
+Die Anwendung ist als Version `1.7.0` dokumentiert und paketiert. Sie laeuft lokal auf Port `8000`, nutzt verschluesselte Konfigurationen unter `%LOCALAPPDATA%\NEMO Deficiencies\` und enthaelt eine Weboberflaeche fuer Config-Auswahl, Reportauswahl, Editor, CLI-Wizard, KI-Zugang, Statistik/Harmonisierung und Regelwerksausgaben.
 
 Im aktuellen Arbeitsverzeichnis gibt es nicht committete beziehungsweise ungetrackte Dateien mit Suffix `PRO-CL00351` sowie neue Dateien fuer den Regelwerksbericht. Der Git-Status vor Erstellung dieses Uebergabepakets zeigte u. a.:
 
@@ -42,8 +42,8 @@ Die `PRO-CL00351`-Dateien scheinen einen neueren oder parallel gesicherten Arbei
 - Harmonisierung gemeinsamer Felder und Grundstruktur fuer generische `{field}`-Regeln.
 - Regelkatalog und Kataloganalyse.
 - Sicherheitsbereinigung: Klartext-INIs, lokale Entwicklungsdatenbank, Entwicklungsschluessel und alte lokale Release-Artefakte wurden nach frueherem Codex-Stand entfernt.
-- Release-Artefakte `1.6.1` liegen unter `release\`: portable ZIP, Wheel und `SHA256SUMS.txt`.
-- Dokumentation `README.md`, `QUICKSTART.md`, `Plan.md` und `RELEASE_NOTES_v1.6.1.md` vorhanden.
+- Release-Artefakte `1.7.0` liegen unter `release\`: Installer (Setup-EXE), portable ZIP, Wheel und `SHA256SUMS.txt`.
+- Dokumentation `README.md`, `QUICKSTART.md`, `Plan.md` und `RELEASE_NOTES_v1.7.0.md` vorhanden.
 - Regelwerksbericht wurde laut frueherem Codex-Task implementiert: PDF und Excel mit Bericht, Regelgruppe, Regel, Status, DQ-Typ, Regeltyp und Bedingung; optional TOP-25; Quelle NEMO-Stand oder Drafts.
 
 ## Getroffene Entscheidungen
@@ -59,7 +59,7 @@ Die `PRO-CL00351`-Dateien scheinen einen neueren oder parallel gesicherten Arbei
 
 ## Aktuell gueltige Konfigurationen und Einstellungen
 
-- Paketversion: `1.6.1`
+- Paketversion: `1.7.0`
 - Python: `>=3.11`, empfohlen 3.11/3.12
 - Anwendung: `nemo-deficiencies` beziehungsweise `backend.main:app`
 - Standardadresse: `http://127.0.0.1:8000`
