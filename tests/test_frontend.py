@@ -117,7 +117,6 @@ class FrontendTest(unittest.TestCase):
         self.assertIn("/api/reports/{report_ref}/restore-original", route_paths)
         self.assertIn("/api/reports/{report_ref}/validate", route_paths)
         self.assertIn("/api/reports/{report_ref}/render-sql", route_paths)
-        self.assertIn("/api/reports/{report_ref}/export-sql", route_paths)
 
     def test_rule_detail_controls_are_rendered_by_frontend(self) -> None:
         app_js = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
@@ -339,10 +338,10 @@ class FrontendTest(unittest.TestCase):
 
         self.assertIn("renderSqlBtn", app_js)
         self.assertIn("renderGeneratedSql", app_js)
-        self.assertIn("exportGeneratedSql", app_js)
+        self.assertNotIn("exportGeneratedSql", app_js)
         self.assertIn("downloadBlob", app_js)
-        self.assertIn("exportDropdownBtn", index_html)
-        self.assertIn('data-format="mssql"', index_html)
+        self.assertNotIn("exportDropdownBtn", index_html)
+        self.assertNotIn("mssqlExportDialog", index_html)
         self.assertIn("writeNemoBtn", index_html)
         self.assertIn("In NEMO speichern", index_html)
         self.assertIn("writeGeneratedSqlToNemo", app_js)

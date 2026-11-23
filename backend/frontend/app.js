@@ -57,8 +57,6 @@ const state = {
   savingDraft: false,
   deletingDraft: false,
   generatingSql: false,
-  exportingSql: false,
-  exportingFormat: false,
   writingToNemo: false,
   loggingChange: false,
   undoingChange: false,
@@ -231,13 +229,6 @@ const elements = {
   loadEditorBtn: document.querySelector("#loadEditorBtn"),
   validateEditorBtn: document.querySelector("#validateEditorBtn"),
   renderSqlBtn: document.querySelector("#renderSqlBtn"),
-  exportSqlBtn: document.querySelector("#exportSqlBtn"),  // kept for compatibility (may be null)
-  exportDropdownBtn: document.querySelector("#exportDropdownBtn"),
-  exportDropdownMenu: document.querySelector("#exportDropdownMenu"),
-  mssqlExportDialog: document.querySelector("#mssqlExportDialog"),
-  confirmMssqlExportBtn: document.querySelector("#confirmMssqlExportBtn"),
-  cancelMssqlExportBtn: document.querySelector("#cancelMssqlExportBtn"),
-  closeMssqlExportDialogBtn: document.querySelector("#closeMssqlExportDialogBtn"),
   writeNemoBtn: document.querySelector("#writeNemoBtn"),
   resetEditorBtn: document.querySelector("#resetEditorBtn"),
   saveDraftBtn: document.querySelector("#saveDraftBtn"),
@@ -5353,12 +5344,10 @@ function updateEditorButtons() {
   const hasModel = Boolean(state.editorModel);
   const selectedBlock = state.selectedBlockIndex === null ? null : (state.editorModel?.blocks || [])[state.selectedBlockIndex];
   const checksContextActive = !selectedBlock || selectedBlock.id === "checks";
-  const busy = state.loadingEditor || state.savingDraft || state.deletingDraft || state.generatingSql || state.exportingSql || state.exportingFormat || state.writingToNemo || state.loggingChange || state.undoingChange || state.restoringOriginal || state.translatingMessages;
+  const busy = state.loadingEditor || state.savingDraft || state.deletingDraft || state.generatingSql || state.writingToNemo || state.loggingChange || state.undoingChange || state.restoringOriginal || state.translatingMessages;
   elements.loadEditorBtn.disabled = !hasReport || busy;
   elements.validateEditorBtn.disabled = !hasReport || !hasModel || busy;
   elements.renderSqlBtn.disabled = !hasReport || !hasModel || busy;
-  if (elements.exportSqlBtn) elements.exportSqlBtn.disabled = !hasReport || !hasModel || busy;
-  if (elements.exportDropdownBtn) elements.exportDropdownBtn.disabled = !hasReport || !hasModel || busy;
   elements.writeNemoBtn.disabled = !hasReport || !hasModel || !state.renderedSql || busy;
   elements.resetEditorBtn.disabled = !hasModel || !state.editorDirty || busy;
   elements.saveDraftBtn.disabled = !hasReport || !hasModel || !state.editorDirty || busy;
@@ -5381,8 +5370,6 @@ function updateEditorButtons() {
   elements.saveDraftBtn.textContent = state.savingDraft ? "Speichert" : "Draft speichern";
   elements.deleteDraftBtn.textContent = state.deletingDraft ? "Verwirft" : "Draft verwerfen";
   elements.renderSqlBtn.textContent = state.generatingSql ? "Generiert" : "SQL-Vorschau";
-  if (elements.exportSqlBtn) elements.exportSqlBtn.textContent = state.exportingSql ? "Exportiert" : "SQL exportieren";
-  if (elements.exportDropdownBtn) elements.exportDropdownBtn.textContent = state.exportingFormat ? "Exportiert …" : "Export ▾";
   elements.writeNemoBtn.textContent = state.writingToNemo ? "Speichert" : "In NEMO speichern";
   if (state.loggingChange) {
     elements.saveDraftBtn.textContent = "Protokolliert";
@@ -5633,106 +5620,6 @@ async function renderGeneratedSql() {
   }
 }
 
-async function exportGeneratedSql() {
-  const report = state.selectedReport;
-  if (!report || !state.editorModel || state.exportingSql) {
-    return;
-  }
-  state.exportingSql = true;
-  updateEditorButtons();
-  setStatus("exportiere");
-  try {
-    recalculateEditorModel();
-    const reportModel = await editorModelForReport();
-    const response = await fetch(`/api/reports/${encodeURIComponent(reportRef(report))}/export-sql`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        configId: state.configId,
-        project: state.project,
-        editorModel: reportModel,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(await responseErrorMessage(response));
-    }
-    const blob = await response.blob();
-    const filename = exportFileNameFromDisposition(response.headers.get("Content-Disposition")) || fallbackSqlFileName(report);
-    downloadBlob(blob, filename);
-    setStatus("bereit", "ok");
-    showToast("SQL exportiert");
-  } catch (error) {
-    setStatus("Fehler", "warn");
-    showToast(error.message);
-  } finally {
-    state.exportingSql = false;
-    updateEditorButtons();
-  }
-}
-
-// ---- Generic Export Connector (dropdown) --------------------------------
-
-function toggleExportDropdown() {
-  const menu = elements.exportDropdownMenu;
-  const btn = elements.exportDropdownBtn;
-  if (!menu || !btn) return;
-  const isOpen = !menu.hidden;
-  menu.hidden = isOpen;
-  btn.setAttribute("aria-expanded", String(!isOpen));
-}
-
-function closeExportDropdown() {
-  if (elements.exportDropdownMenu) elements.exportDropdownMenu.hidden = true;
-  if (elements.exportDropdownBtn) elements.exportDropdownBtn.setAttribute("aria-expanded", "false");
-}
-
-async function runExport(format, options) {
-  const report = state.selectedReport;
-  if (!report || !state.editorModel || state.exportingFormat) {
-    return;
-  }
-  state.exportingFormat = true;
-  updateEditorButtons();
-  setStatus("exportiere");
-  try {
-    recalculateEditorModel();
-    const reportModel = await editorModelForReport();
-    const ref = reportRef(report);
-    const response = await fetch(`/api/editor/${encodeURIComponent(ref)}/export`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        editorModel: reportModel,
-        format,
-        options: options || {},
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(await responseErrorMessage(response));
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const warnings = parseInt(response.headers.get("X-Export-Warnings") || "0", 10);
-    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-    const filename = filenameMatch ? filenameMatch[1] : `nemo_export.${format}`;
-    downloadBlob(blob, filename);
-    setStatus("bereit", "ok");
-    const warningText = warnings > 0 ? ` (${warnings} Hinweis${warnings === 1 ? "" : "e"})` : "";
-    showToast(`${format.toUpperCase()} exportiert${warningText}`);
-  } catch (error) {
-    setStatus("Fehler", "warn");
-    showToast(error.message);
-  } finally {
-    state.exportingFormat = false;
-    updateEditorButtons();
-  }
-}
-
-function openMssqlExportDialog() {
-  if (!elements.mssqlExportDialog) return;
-  elements.mssqlExportDialog.showModal();
-}
-
 async function writeGeneratedSqlToNemo() {
   let report = state.selectedReport;
   if (!report || !state.editorModel || !state.renderedSql || state.writingToNemo) {
@@ -5881,17 +5768,6 @@ function apiDetailText(detail) {
     }
   }
   return String(detail);
-}
-
-function exportFileNameFromDisposition(disposition) {
-  const match = /filename="?([^";]+)"?/i.exec(disposition || "");
-  return match ? match[1] : "";
-}
-
-function fallbackSqlFileName(report) {
-  const baseName = report.internalName || report.displayName || report.id || "nemo_report";
-  const safeName = String(baseName).replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+|[._]+$/g, "") || "nemo_report";
-  return safeName.toLocaleLowerCase().endsWith(".sql") ? safeName : `${safeName}.sql`;
 }
 
 function downloadBlob(blob, filename) {
@@ -6098,55 +5974,6 @@ function bindEvents() {
   elements.loadEditorBtn.addEventListener("click", loadEditorModel);
   elements.validateEditorBtn.addEventListener("click", validateEditedModel);
   elements.renderSqlBtn.addEventListener("click", renderGeneratedSql);
-  if (elements.exportSqlBtn) elements.exportSqlBtn.addEventListener("click", exportGeneratedSql);
-
-  // Export dropdown
-  if (elements.exportDropdownBtn) {
-    elements.exportDropdownBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      toggleExportDropdown();
-    });
-  }
-  if (elements.exportDropdownMenu) {
-    elements.exportDropdownMenu.addEventListener("click", (e) => {
-      const item = e.target.closest("[data-format]");
-      if (!item) return;
-      closeExportDropdown();
-      const format = item.dataset.format;
-      if (format === "mssql") {
-        openMssqlExportDialog();
-      } else {
-        runExport(format, {});
-      }
-    });
-  }
-  // Close dropdown on outside click
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest("#exportDropdownWrap")) {
-      closeExportDropdown();
-    }
-  });
-  // Close dropdown on Escape
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeExportDropdown();
-  });
-
-  // MSSQL export dialog
-  if (elements.confirmMssqlExportBtn) {
-    elements.confirmMssqlExportBtn.addEventListener("click", () => {
-      const form = document.querySelector("#mssqlExportForm");
-      const mode = form ? (form.querySelector("input[name=mssqlMode]:checked")?.value || "create_and_insert") : "create_and_insert";
-      elements.mssqlExportDialog.close();
-      runExport("mssql", { mode });
-    });
-  }
-  if (elements.cancelMssqlExportBtn) {
-    elements.cancelMssqlExportBtn.addEventListener("click", () => elements.mssqlExportDialog.close());
-  }
-  if (elements.closeMssqlExportDialogBtn) {
-    elements.closeMssqlExportDialogBtn.addEventListener("click", () => elements.mssqlExportDialog.close());
-  }
-
   elements.writeNemoBtn.addEventListener("click", writeGeneratedSqlToNemo);
   elements.resetEditorBtn.addEventListener("click", resetEditorModel);
   elements.saveDraftBtn.addEventListener("click", saveEditorDraft);

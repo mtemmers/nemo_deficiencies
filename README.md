@@ -2,17 +2,17 @@
 
 NEMO Deficiencies ist eine lokale Python-Webanwendung zur grafischen Bearbeitung von `(DEFICIENCIES)`-Berichten auf Basis der `nemo_library`. Das vorhandene CLI-Skript `nemo_import_export.py` bleibt fuer Index-, SQL- und Datenexporte enthalten.
 
-Aktuelle Version: **1.7.0**
+Aktuelle Version: **1.7.1**
 
-Neu in 1.7.0: Export über InfoZoom-SDK (`.fox`), MSSQL-Export (T-SQL), Export-Connectoren mit automatischer Erkennung, persistenter Übersetzungscache für Regelmeldungen, LiteLLM als KI-Anbieter, Regelwerksbericht (PDF/Excel) sowie Projektauswahl und Fehlerprotokoll für LiteLLM-Modelle. Details: [RELEASE_NOTES_v1.7.0.md](RELEASE_NOTES_v1.7.0.md).
+Neu in 1.7.1: Die Export-Funktionen SQL (MSSQL/T-SQL), JSON und InfoZoom (inklusive InfoZoom-SDK) sind entfernt. Regelwerksbericht (PDF/Excel), LiteLLM als KI-Anbieter und Übersetzungscache bleiben erhalten. Details: [RELEASE_NOTES_v1.7.1.md](RELEASE_NOTES_v1.7.1.md).
 
 Für den schnellsten Einstieg siehe [QUICKSTART.md](QUICKSTART.md).
 
 ## Empfohlener Start für Anwender
 
-Für Version 1.7.0 ist die Portable-Version der einfachste Weg. Eine Python-Installation ist nicht erforderlich:
+Für Version 1.7.1 ist die Portable-Version der einfachste Weg. Eine Python-Installation ist nicht erforderlich:
 
-1. Unter GitHub **Releases** `NEMO-Deficiencies-1.7.0-portable.zip` herunterladen.
+1. Unter GitHub **Releases** `NEMO-Deficiencies-1.7.1-portable.zip` herunterladen.
 2. Das ZIP vollständig in einen eigenen Ordner entpacken.
 3. `NEMO Deficiencies.exe` starten.
 4. Die Konfiguration über das Plus-Symbol in der Weboberfläche anlegen.
@@ -29,11 +29,11 @@ Persönliche Daten, verschlüsselte Zugangsdaten und Logs bleiben unabhängig vo
 %LOCALAPPDATA%\NEMO Deficiencies\
 ```
 
-Der Release 1.7.0 enthält das portable ZIP, ein Python-Wheel und `SHA256SUMS.txt`. Ein Installer kann mit dem dokumentierten Release-Skript zusätzlich erzeugt werden.
+Der Release 1.7.1 enthält das portable ZIP, ein Python-Wheel und `SHA256SUMS.txt`. Ein Installer kann mit dem dokumentierten Release-Skript zusätzlich erzeugt werden.
 
 ### Einfacher Start der Portable-Version
 
-1. `NEMO-Deficiencies-1.7.0-portable.zip` vollständig in einen eigenen Ordner entpacken.
+1. `NEMO-Deficiencies-1.7.1-portable.zip` vollständig in einen eigenen Ordner entpacken.
 2. `NEMO Deficiencies.exe` starten.
 3. In der Hauptseite eine Konfiguration anlegen oder auswählen.
 4. In der Kopfzeile **CLI-Wizard** öffnen.
@@ -134,7 +134,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 Im Projektordner genügt:
 
 ```powershell
-.\scripts\publish-release.ps1 -Version 1.7.0
+.\scripts\publish-release.ps1 -Version 1.7.1
 ```
 
 Der Ablauf:
@@ -142,7 +142,7 @@ Der Ablauf:
 1. `backend/__init__.py` wird auf die angegebene Version gesetzt.
 2. Alle Tests werden ausgeführt.
 3. Git zeigt alle Dateien, die in den Release aufgenommen werden.
-4. Nach Bestätigung werden Commit und Tag `v1.7.0` erstellt und übertragen.
+4. Nach Bestätigung werden Commit und Tag `v1.7.1` erstellt und übertragen.
 5. GitHub Actions baut automatisch Installer, portables ZIP, Wheel und Prüfsummen.
 6. GitHub veröffentlicht die Dateien unter **Releases**.
 
@@ -151,7 +151,7 @@ Das Skript nimmt alle in der Git-Übersicht angezeigten Änderungen in den Relea
 Optional kann vor dem Push zusätzlich lokal gebaut werden:
 
 ```powershell
-.\scripts\publish-release.ps1 -Version 1.7.0 -BuildLocal
+.\scripts\publish-release.ps1 -Version 1.7.1 -BuildLocal
 ```
 
 ### Installer nur lokal bauen
@@ -172,9 +172,9 @@ Das Skript installiert fehlende Build-Werkzeuge, führt die Tests aus und schrei
 
 ```text
 release\
-├─ NEMO-Deficiencies-Setup-1.7.0.exe
-├─ NEMO-Deficiencies-1.7.0-portable.zip
-├─ nemo_deficiencies-1.7.0-py3-none-any.whl
+├─ NEMO-Deficiencies-Setup-1.7.1.exe
+├─ NEMO-Deficiencies-1.7.1-portable.zip
+├─ nemo_deficiencies-1.7.1-py3-none-any.whl
 └─ SHA256SUMS.txt
 ```
 
@@ -471,11 +471,10 @@ POST   /api/reports/{report_ref}/change-log/undo
 POST   /api/reports/{report_ref}/restore-original
 POST   /api/reports/{report_ref}/validate
 POST   /api/reports/{report_ref}/render-sql
-POST   /api/reports/{report_ref}/export-sql
 POST   /api/reports/{report_ref}/write-to-nemo
 ```
 
-Der aktuelle Stand merkt sich die zuletzt gewaehlte Config im Browser, oeffnet Reports zuerst im Editor-Modell und kann Editor-Modelle laden, lokal bearbeiten, validieren, als Draft in SQLite speichern, Änderungen persistent protokollieren, schrittweise rückgängig machen und eine vollständige SQL-Vorschau erzeugen. Beim ersten Laden wird der Ursprungsbericht dauerhaft in SQLite gesichert. `Ursprungsbericht wiederherstellen` ersetzt den aktuellen Draft durch diesen Stand und protokolliert den Vorgang; NEMO wird dabei noch nicht verändert. Beim erneuten Laden wird ein vorhandener Draft bevorzugt angezeigt; über `Draft verwerfen` wird wieder das aktuell aus NEMO geladene Modell angezeigt. Die SQL-Vorschau ersetzt gezielt den `checks AS (...)` Block im Original-SQL, zeigt aber unten das komplette SQL inklusive Kopfkommentar, Standardausgabe und DQ-Kommentaren an. Fehlermeldungen werden im Editor ohne Pipe gepflegt; der SQL-Generator schreibt die Pipe automatisch. Das SQL kann lokal exportiert oder nach einer expliziten Überschreib-Bestätigung in NEMO zurückgeschrieben werden. Dabei werden der ausgewählte Bericht und der zugehörige Bericht mit dem Suffix `TOP 25` gemeinsam aktualisiert. Die Zuordnung erkennt deutsche und englische Sachbegriffe, unter anderem `Customers/Kunden`, `Suppliers/Lieferanten`, `Parts/Teile`, `Addresses/Adressen` und `Contacts/Kontakte`. Fehlt der Partner, wird er aus den Metadaten des Hauptberichts neu angelegt. Der Partnerbericht erhält `SELECT TOP 25` und `ORDER BY ERROREVALUATION DESC`; mehrdeutige Treffer brechen den Schreibvorgang weiterhin ab. Ein vollständiger SQL-Diff ist noch offen.
+Der aktuelle Stand merkt sich die zuletzt gewaehlte Config im Browser, oeffnet Reports zuerst im Editor-Modell und kann Editor-Modelle laden, lokal bearbeiten, validieren, als Draft in SQLite speichern, Änderungen persistent protokollieren, schrittweise rückgängig machen und eine vollständige SQL-Vorschau erzeugen. Beim ersten Laden wird der Ursprungsbericht dauerhaft in SQLite gesichert. `Ursprungsbericht wiederherstellen` ersetzt den aktuellen Draft durch diesen Stand und protokolliert den Vorgang; NEMO wird dabei noch nicht verändert. Beim erneuten Laden wird ein vorhandener Draft bevorzugt angezeigt; über `Draft verwerfen` wird wieder das aktuell aus NEMO geladene Modell angezeigt. Die SQL-Vorschau ersetzt gezielt den `checks AS (...)` Block im Original-SQL, zeigt aber unten das komplette SQL inklusive Kopfkommentar, Standardausgabe und DQ-Kommentaren an. Fehlermeldungen werden im Editor ohne Pipe gepflegt; der SQL-Generator schreibt die Pipe automatisch. Das SQL kann nach einer expliziten Überschreib-Bestätigung in NEMO zurückgeschrieben werden. Dabei werden der ausgewählte Bericht und der zugehörige Bericht mit dem Suffix `TOP 25` gemeinsam aktualisiert. Die Zuordnung erkennt deutsche und englische Sachbegriffe, unter anderem `Customers/Kunden`, `Suppliers/Lieferanten`, `Parts/Teile`, `Addresses/Adressen` und `Contacts/Kontakte`. Fehlt der Partner, wird er aus den Metadaten des Hauptberichts neu angelegt. Der Partnerbericht erhält `SELECT TOP 25` und `ORDER BY ERROREVALUATION DESC`; mehrdeutige Treffer brechen den Schreibvorgang weiterhin ab. Ein vollständiger SQL-Diff ist noch offen.
 
 API-Aufrufe und NEMO-Schreibvorgänge werden mit einer Vorgangs-ID in `logs/nemo_deficiencies.log` protokolliert. Die Datei rotiert bei 5 MB; bis zu fünf ältere Logdateien bleiben erhalten. Fehlermeldungen in der Weboberfläche zeigen die Vorgangs-ID zur gezielten Suche im Log an.
 
@@ -513,13 +512,13 @@ GET  /api/rule-catalog
 POST /api/editor-model/validate
 ```
 
-Dieser Stand speichert bearbeitete Modelle lokal als Draft, protokolliert Regeländerungen in SQLite und kann daraus eine vollständige SQL-Vorschau neu generieren. DQ-Typ-Kommentare werden vor den `WHEN`-Regeln erzeugt; fehlende DQ-Typen werden heuristisch gesetzt. Export und bestätigtes Rückschreiben nach NEMO einschließlich des zugehörigen `TOP 25`-Berichts sind umgesetzt. Der SQL-Diff bleibt als nächster Schritt offen.
+Dieser Stand speichert bearbeitete Modelle lokal als Draft, protokolliert Regeländerungen in SQLite und kann daraus eine vollständige SQL-Vorschau neu generieren. DQ-Typ-Kommentare werden vor den `WHEN`-Regeln erzeugt; fehlende DQ-Typen werden heuristisch gesetzt. Bestätigtes Rückschreiben nach NEMO einschließlich des zugehörigen `TOP 25`-Berichts sind umgesetzt. Der SQL-Diff bleibt als nächster Schritt offen.
 
 ## Sprachen
 
 Die Oberflächensprache kann in der Kopfzeile unabhängig von der Berichtssprache zwischen Deutsch und Englisch umgeschaltet werden. Neue manuelle oder KI-unterstützte Regeln werden in der gewählten Oberflächensprache erstellt. Beide Auswahlen bleiben im Browser gespeichert.
 
-Die Berichtssprache steuert die Fehlermeldungen und die vom Generator erzeugten SQL-Kommentare. Weicht sie von der Sprache einer Fehlermeldung ab, übersetzt das aktive globale KI-Profil die Meldung beim Umschalten und vor Vorschau, Export oder NEMO-Speicherung. Die Originalmeldung im Regelwerk bleibt unverändert; Übersetzungen werden nur für die Ausgabe verwendet. Erfolgreiche Übersetzungen werden pro KI-Profil, Modell, Ausgangssprache und Zielsprache dauerhaft in SQLite zwischengespeichert und stehen dadurch auch nach einem Neustart ohne erneuten KI-Aufruf zur Verfügung. Doppelte Meldungen werden zusammengefasst und neue Übersetzungen in kleinen Paketen verarbeitet. Ein vorübergehend nicht erreichbarer KI-Dienst blockiert bereits gecachte Übersetzungen nicht. Ohne eingerichteten KI-Zugang kann ein Bericht nur erzeugt werden, wenn keine Meldung übersetzt werden muss.
+Die Berichtssprache steuert die Fehlermeldungen und die vom Generator erzeugten SQL-Kommentare. Weicht sie von der Sprache einer Fehlermeldung ab, übersetzt das aktive globale KI-Profil die Meldung beim Umschalten und vor Vorschau oder NEMO-Speicherung. Die Originalmeldung im Regelwerk bleibt unverändert; Übersetzungen werden nur für die Ausgabe verwendet. Erfolgreiche Übersetzungen werden pro KI-Profil, Modell, Ausgangssprache und Zielsprache dauerhaft in SQLite zwischengespeichert und stehen dadurch auch nach einem Neustart ohne erneuten KI-Aufruf zur Verfügung. Doppelte Meldungen werden zusammengefasst und neue Übersetzungen in kleinen Paketen verarbeitet. Ein vorübergehend nicht erreichbarer KI-Dienst blockiert bereits gecachte Übersetzungen nicht. Ohne eingerichteten KI-Zugang kann ein Bericht nur erzeugt werden, wenn keine Meldung übersetzt werden muss.
 
 ## Generische KI-Anbindung
 

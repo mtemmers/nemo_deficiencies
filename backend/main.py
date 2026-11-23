@@ -83,12 +83,6 @@ from backend.services.rule_catalog_store import (
 )
 from backend.services.sql_generator import SqlGenerationError, render_sql_from_model, render_top_25_sql
 from backend.services.sql_model import get_rule_catalog, merge_missing_group_metadata, normalize_editor_model, parse_editor_model
-from backend.export_connectors import (
-    ExportConnectorError,
-    get_connector,
-    list_connectors,
-)
-import backend.export_connectors  # noqa: F401 – trigger auto-discovery at import time
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 
@@ -433,14 +427,6 @@ class RuleTemplateBindingRequest(BaseModel):
     group_ref: str = Field(alias="groupRef", min_length=1, max_length=500)
     rule_ref: str = Field(alias="ruleRef", min_length=1, max_length=500)
     parameters: dict = Field(default_factory=dict)
-
-
-class EditorExportRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    editor_model: dict = Field(alias="editorModel")
-    format: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
-    options: dict = Field(default_factory=dict)
 
 
 class RuleCatalogAnalysisRequest(BaseModel):
@@ -1988,158 +1974,6 @@ def render_report_sql(report_ref: str, request: EditorModelRequest) -> dict:
     return _render_sql_payload(report_ref, request)
 
 
-@app.post("/api/reports/{report_ref}/export-sql")
-def export_report_sql(report_ref: str, request: EditorModelRequest) -> Response:
-    payload = _render_sql_payload(report_ref, request)
-    filename = _sql_export_filename(payload["report"])
-    return Response(
-        content=payload["sql"],
-        media_type="text/sql; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get("/api/export-connectors")
-def get_export_connectors() -> dict:
-    """List all available export connectors."""
-    return {"connectors": list_connectors()}
-
-
-@app.post("/api/editor/{report_ref}/export")
-def export_editor_model(report_ref: str, request: EditorExportRequest) -> Response:
-    """
-    Export an editor model in the requested format via the connector framework.
-
-    Body:
-        editorModel: The full editor model dict
-        format:      Connector name, e.g. "mssql", "json", "infozoom"
-        options:     Format-specific options dict.
-                     For infozoom with mode="sdk_native", the connector's
-                     export_to_file() is called and the binary .fdb file is
-                     streamed back.
-
-    Returns a file download response with warnings embedded as headers.
-    """
-    import tempfile
-
-    try:
-        connector = get_connector(request.format)
-    except KeyError:
-        available = ", ".join(c["name"] for c in list_connectors())
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown export format '{request.format}'. Available: {available}",
-        )
-
-    model = normalize_editor_model(dict(request.editor_model))
-    options = dict(request.options)
-
-    # Build download filename stem from report info
-    report = model.get("report") or {}
-    raw_name = (
-        report.get("internalName")
-        or report.get("displayName")
-        or report.get("id")
-        or report_ref
-        or "nemo_export"
-    )
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw_name)).strip("._") or "nemo_export"
-
-    groups = ((model.get("checks") or {}).get("groups") or [])
-    all_rules = [r for g in groups for r in (g.get("rules") or [])]
-
-    # ------------------------------------------------------------------ #
-    # SDK native binary path (InfoZoom .fdb)                              #
-    # ------------------------------------------------------------------ #
-    mode = str(options.get("mode") or "")
-    if request.format == "infozoom" and mode == "sdk_native":
-        try:
-            warnings = connector.validate(model, options=options)
-        except ExportConnectorError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        # Write to temp file, then stream it back
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".fox", prefix="nemo_infozoom_")
-        os.close(tmp_fd)
-        # Remove temp file first — InfoZoom SDK creates it fresh via SaveFileAs
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        try:
-            try:
-                written_path = connector.export_to_file(model, output_path=tmp_path, options=options)
-            except ExportConnectorError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-            except AttributeError:
-                raise HTTPException(
-                    status_code=501,
-                    detail=(
-                        "Der InfoZoom-Connector unterstützt export_to_file() nicht. "
-                        "Bitte die Anwendung aktualisieren."
-                    ),
-                )
-
-            filename = f"{stem}.fox"
-            response_headers = {
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "X-Export-Format": "infozoom_sdk_native",
-                "X-Export-Warnings": str(len(warnings)),
-                "X-Export-Total-Rules": str(len(all_rules)),
-            }
-
-            # Read file contents and return as Response (file may be large,
-            # but InfoZoom .fdb files are typically small enough to buffer)
-            with open(written_path, "rb") as fh:
-                content_bytes = fh.read()
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-
-        return Response(
-            content=content_bytes,
-            media_type="application/octet-stream",
-            headers=response_headers,
-        )
-
-    # ------------------------------------------------------------------ #
-    # Standard text/string export path                                    #
-    # ------------------------------------------------------------------ #
-    try:
-        warnings = connector.validate(model)
-        content = connector.export(model, options=options)
-    except ExportConnectorError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    ext = connector.file_extension
-    filename = f"{stem}.{ext}" if not stem.lower().endswith(f".{ext}") else stem
-
-    # Choose media type by format
-    media_types = {
-        "json": "application/json; charset=utf-8",
-        "mssql": "text/sql; charset=utf-8",
-        "infozoom": "text/plain; charset=utf-8",
-    }
-    media_type = media_types.get(request.format, "text/plain; charset=utf-8")
-
-    content_bytes = content.encode("utf-8")
-
-    response_headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
-        "X-Export-Format": request.format,
-        "X-Export-Warnings": str(len(warnings)),
-        "X-Export-Total-Rules": str(len(all_rules)),
-    }
-
-    return Response(
-        content=content_bytes,
-        media_type=media_type,
-        headers=response_headers,
-    )
-
-
 @app.post("/api/reports/{report_ref}/write-to-nemo")
 def write_report_to_nemo(report_ref: str, request: NemoReportWriteRequest) -> dict:
     operation_id = request_id_context.get() or uuid.uuid4().hex[:12]
@@ -2389,12 +2223,6 @@ def _build_top_25_report(source_report: dict) -> dict:
     )
     return created
 
-
-def _sql_export_filename(report: dict) -> str:
-    raw_name = report.get("internalName") or report.get("displayName") or report.get("id") or "nemo_report"
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw_name)).strip("._")
-    filename = stem or "nemo_report"
-    return filename if filename.lower().endswith(".sql") else f"{filename}.sql"
 
 @app.post("/api/reports/{report_ref}/run")
 def run_report(report_ref: str, request: ReportRunRequest) -> dict:

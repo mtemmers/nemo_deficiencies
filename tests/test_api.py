@@ -26,7 +26,6 @@ from backend.main import (
     _resolve_top_25_report,
     _load_reports,
     _nemo_error_summary,
-    _sql_export_filename,
     health,
     get_config_statistics,
     get_editor_model,
@@ -522,10 +521,6 @@ class ApiTest(unittest.TestCase):
 
         self.assertEqual("Master Data", data["defaultProject"])
         self.assertEqual(["Master Data", "Business Processes"], [project["id"] for project in data["projects"]])
-
-    def test_sql_export_filename_is_safe(self) -> None:
-        self.assertEqual("deficiencies_customers_top_25.sql", _sql_export_filename({"internalName": "deficiencies_customers_top_25"}))
-        self.assertEqual("DEFICIENCIES_Customers_TOP_25.sql", _sql_export_filename({"displayName": "(DEFICIENCIES) Customers TOP 25"}))
 
     def test_nemo_error_summary_extracts_api_detail(self) -> None:
         error = ValueError(
