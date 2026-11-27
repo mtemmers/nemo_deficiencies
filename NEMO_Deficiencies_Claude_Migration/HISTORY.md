@@ -6,6 +6,8 @@
 
 2026-07 bis 2026-08 - Ausbau zur lokalen Webanwendung - FastAPI-Backend, lokale Browseroberflaeche, Startskripte, Config-Auswahl, Reportauswahl, Editor-Grundlagen und SQL-Modell/Generator entstanden.
 
+2026-11-27 - Release-Stand 1.7.2 - pa_export-Schalter vor der SQL-Vorschau (pro Config, Standard aus), Kopierbutton fuer Fehlermeldungen (25 s sichtbar).
+
 2026-11-23 - Release-Stand 1.7.1 - InfoZoom-SDK, SQL-/MSSQL-, JSON- und InfoZoom-Export vollstaendig entfernt (inkl. Connector, Cache, SDK-Dateien, pywin32). Schreiben nach NEMO, TOP-25-Logik und Regelwerksbericht bleiben erhalten.
 
 2026-10-22 - Release-Stand 1.7.0 - Minor-Release mit InfoZoom-/MSSQL-Export, Export-Connectoren, Regelwerksbericht und LiteLLM. Alle 167 Tests bestanden (u. a. Statistik-Gruppendetails und Frontend-Export-Dropdown repariert). Installer, portables ZIP und Wheel gebaut; Portable-Start mit Health-Version 1.7.0 geprueft.

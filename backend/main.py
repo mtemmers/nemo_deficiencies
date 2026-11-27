@@ -81,7 +81,7 @@ from backend.services.rule_catalog_store import (
     RuleCatalogStore,
     RuleTemplateNotFoundError,
 )
-from backend.services.sql_generator import SqlGenerationError, render_sql_from_model, render_top_25_sql
+from backend.services.sql_generator import SqlGenerationError, has_pa_export_restriction, render_sql_from_model, render_top_25_sql
 from backend.services.sql_model import get_rule_catalog, merge_missing_group_metadata, normalize_editor_model, parse_editor_model
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -313,6 +313,7 @@ class EditorModelRequest(BaseModel):
     config_id: Optional[str] = Field(default=None, alias="configId")
     project: str = DEFAULT_PROJECT
     editor_model: dict = Field(alias="editorModel")
+    pa_export_filter: Optional[bool] = Field(default=None, alias="paExportFilter")
 
 
 class NemoReportWriteRequest(EditorModelRequest):
@@ -1707,6 +1708,10 @@ def get_editor_model(
         "source": "draft" if draft else "imported-report-sql",
         "reportSqlHash": _sql_fingerprint(original_sql),
         "staleDraftDiscarded": stale_draft_discarded,
+        "paExportFilter": {
+            "available": has_pa_export_restriction(original_sql),
+            "enabled": _effective_pa_export_filter(profile.id, original_sql, None),
+        },
     }
 
 
@@ -1948,8 +1953,9 @@ def _render_sql_payload(report_ref: str, request: EditorModelRequest) -> dict:
     original_sql = report.get("querySyntax") or ""
     model = normalize_editor_model(request.editor_model)
     _ensure_editor_model_matches_report(model, report)
+    pa_export_filter = _effective_pa_export_filter(profile.id, original_sql, request.pa_export_filter)
     try:
-        rendered = render_sql_from_model(original_sql, model)
+        rendered = render_sql_from_model(original_sql, model, pa_export_filter=pa_export_filter)
     except SqlGenerationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1966,7 +1972,47 @@ def _render_sql_payload(report_ref: str, request: EditorModelRequest) -> dict:
         "validation": parsed_generated["validation"],
         "summary": parsed_generated["summary"],
         "source": "generated-checks-block",
+        "paExportFilter": {
+            "available": has_pa_export_restriction(original_sql),
+            "enabled": pa_export_filter,
+        },
     }
+
+
+def _effective_pa_export_filter(config_id: str, original_sql: str, requested: Optional[bool]) -> Optional[bool]:
+    """
+    Ermittelt den wirksamen Schalterwert:
+    - Wenn das Original-SQL keine pa_export-Einschränkung hat, gibt es nichts zu schalten (None).
+    - Eine explizite Anfrage (requested) hat Vorrang.
+    - Sonst gilt der gespeicherte Config-Wert.
+    - Ohne gespeicherten Wert gilt der Stand aus dem Bestands-SQL: vorhanden -> an.
+    """
+    if not has_pa_export_restriction(original_sql):
+        return None
+    if requested is not None:
+        return requested
+    stored = _store().get_pa_export_filter(config_id)
+    return stored if stored is not None else True
+
+
+class PaExportFilterRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    config_id: Optional[str] = Field(default=None, alias="configId")
+    enabled: bool
+
+
+@app.get("/api/configs/{config_id}/pa-export-filter")
+def get_pa_export_filter(config_id: str) -> dict:
+    stored = _store().get_pa_export_filter(config_id)
+    return {"configId": config_id, "stored": stored, "default": True}
+
+
+@app.put("/api/configs/{config_id}/pa-export-filter")
+def set_pa_export_filter(config_id: str, request: PaExportFilterRequest) -> dict:
+    _store().set_pa_export_filter(config_id, request.enabled)
+    return {"configId": config_id, "enabled": request.enabled}
+
 
 
 @app.post("/api/reports/{report_ref}/render-sql")

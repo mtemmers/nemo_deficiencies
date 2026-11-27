@@ -94,6 +94,44 @@ class ConfigStore:
             connection.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_config_profiles_name ON config_profiles(name)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS config_settings (
+                    config_id TEXT NOT NULL,
+                    setting_key TEXT NOT NULL,
+                    setting_value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (config_id, setting_key)
+                )
+                """
+            )
+
+    PA_EXPORT_FILTER_KEY = "paExportFilter"
+
+    def get_pa_export_filter(self, config_id: str) -> Optional[bool]:
+        """Gibt den gespeicherten Schalterwert zurück, oder None, wenn noch keiner gesetzt wurde."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM config_settings WHERE config_id = ? AND setting_key = ?",
+                (config_id, self.PA_EXPORT_FILTER_KEY),
+            ).fetchone()
+        if row is None:
+            return None
+        return str(row["setting_value"]) == "1"
+
+    def set_pa_export_filter(self, config_id: str, enabled: bool) -> None:
+        self._get_row(config_id)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO config_settings (config_id, setting_key, setting_value, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(config_id, setting_key)
+                DO UPDATE SET setting_value = excluded.setting_value, updated_at = excluded.updated_at
+                """,
+                (config_id, self.PA_EXPORT_FILTER_KEY, "1" if enabled else "0", now),
+            )
 
     def _encrypt(self, content: str) -> bytes:
         return self._fernet.encrypt(content.encode("utf-8"))

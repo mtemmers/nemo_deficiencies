@@ -157,6 +157,11 @@
                   <option value="en">English</option>
                 </select>
               </label>
+              <label class="pa-export-toggle" id="paExportToggleWrap" title="Schränkt die Prüfung auf Datensätze ein, die in pa_export vorkommen (CTE 2 und 3).">
+                <input type="checkbox" id="paExportFilterToggle">
+                <span>Nur prozessrelevante Datensätze (pa_export)</span>
+                <small id="paExportFilterState">an</small>
+              </label>
               <button id="renderSqlBtn" class="button secondary" type="button" disabled>SQL-Vorschau</button>
               <button id="writeNemoBtn" class="button secondary danger" type="button" disabled>In NEMO speichern</button>
               <button id="resetEditorBtn" class="button secondary expert-only" type="button" disabled>Zurücksetzen</button>
@@ -224,7 +229,9 @@
                 </div>
                 <div id="sqlPreviewPanel" class="sql-preview-panel" hidden>
                   <span id="sqlPreviewInfo" class="meta-line sql-preview-info">Noch nicht generiert</span>
-                  <pre id="sqlPreview" class="sql-preview">Keine SQL-Vorschau</pre>
+                  <div class="sql-preview-container">
+                    <textarea id="sqlPreview" class="sql-preview-editor" placeholder="Keine SQL-Vorschau" spellcheck="false"></textarea>
+                  </div>
                 </div>
               </section>
             </div>

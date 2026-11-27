@@ -57,6 +57,7 @@ const state = {
   savingDraft: false,
   deletingDraft: false,
   generatingSql: false,
+  paExportStored: null,
   writingToNemo: false,
   loggingChange: false,
   undoingChange: false,
@@ -229,6 +230,9 @@ const elements = {
   loadEditorBtn: document.querySelector("#loadEditorBtn"),
   validateEditorBtn: document.querySelector("#validateEditorBtn"),
   renderSqlBtn: document.querySelector("#renderSqlBtn"),
+  paExportToggleWrap: document.querySelector("#paExportToggleWrap"),
+  paExportFilterToggle: document.querySelector("#paExportFilterToggle"),
+  paExportFilterState: document.querySelector("#paExportFilterState"),
   writeNemoBtn: document.querySelector("#writeNemoBtn"),
   resetEditorBtn: document.querySelector("#resetEditorBtn"),
   saveDraftBtn: document.querySelector("#saveDraftBtn"),
@@ -2505,6 +2509,7 @@ async function loadEditorModel(options = {}) {
     state.currentDraft = payload.draft || null;
     state.baseline = payload.baseline || null;
     state.reportSqlHash = payload.reportSqlHash || "";
+    syncPaExportToggle(payload.paExportFilter);
     state.changeLog = payload.changeLog || [];
     state.expandedGroups = new Set();
     state.selectedRuleRef = null;
@@ -5632,6 +5637,56 @@ async function prepareReportLanguage() {
   }
 }
 
+// ---- pa_export-Filter (pro Config) ---------------------------------------
+
+function paExportFilterRequested() {
+  // Der Schalter wird immer mitgeschickt, sobald er sichtbar ist (Report hat die Einschränkung).
+  if (!elements.paExportToggleWrap || elements.paExportToggleWrap.hidden) return null;
+  return Boolean(elements.paExportFilterToggle.checked);
+}
+
+function syncPaExportToggle(info) {
+  if (!elements.paExportToggleWrap) return;
+  const available = Boolean(info && info.available);
+  elements.paExportToggleWrap.hidden = !available;
+  if (!available) return;
+  const enabled = Boolean(info.enabled);
+  elements.paExportFilterToggle.checked = enabled;
+  elements.paExportFilterState.textContent = enabled ? "an" : "aus";
+  elements.paExportToggleWrap.classList.toggle("off", !enabled);
+}
+
+async function loadPaExportFilterForConfig() {
+  if (!state.configId || !elements.paExportToggleWrap) return;
+  try {
+    const payload = await requestJson(`/api/configs/${encodeURIComponent(state.configId)}/pa-export-filter`);
+    state.paExportStored = payload.stored;
+  } catch (error) {
+    state.paExportStored = null;
+  }
+}
+
+async function onPaExportToggleChanged() {
+  const enabled = Boolean(elements.paExportFilterToggle.checked);
+  elements.paExportFilterState.textContent = enabled ? "an" : "aus";
+  elements.paExportToggleWrap.classList.toggle("off", !enabled);
+  // Vorschau ist mit dem alten Schalterstand erzeugt worden: zurücksetzen
+  clearSqlPreview(enabled ? "Schalter geändert – SQL-Vorschau neu erzeugen" : "Schalter geändert – SQL-Vorschau neu erzeugen");
+  if (!state.configId) return;
+  try {
+    await requestJson(`/api/configs/${encodeURIComponent(state.configId)}/pa-export-filter`, {
+      method: "PUT",
+      body: JSON.stringify({ configId: state.configId, enabled }),
+    });
+    state.paExportStored = enabled;
+    showToast(enabled ? "pa_export-Filter aktiviert und für diese Config gespeichert" : "pa_export-Filter deaktiviert und für diese Config gespeichert");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+// ---- Generierte SQL-Vorschau ---------------------------------------------
+
 async function renderGeneratedSql() {
   const report = state.selectedReport;
   if (!report || !state.editorModel || state.generatingSql) {
@@ -5651,9 +5706,11 @@ async function renderGeneratedSql() {
         configId: state.configId,
         project: state.project,
         editorModel: reportModel,
+        paExportFilter: paExportFilterRequested(),
       }),
     });
     renderSqlPreview(payload);
+    syncPaExportToggle(payload.paExportFilter);
     state.renderedReportLanguage = state.reportLanguage;
     setStatus("bereit", "ok");
     showToast(payload.changed ? "SQL-Vorschau generiert" : "SQL ist unverändert");
@@ -5830,7 +5887,7 @@ function downloadBlob(blob, filename) {
 function renderSqlPreview(payload) {
   state.renderedSql = payload.sql || "";
   const previewSql = payload.sql || payload.generatedChecksSql || "";
-  elements.sqlPreview.textContent = previewSql || "Kein SQL generiert";
+  elements.sqlPreview.value = previewSql || "Kein SQL generiert";
   elements.sqlPreviewInfo.textContent = payload.changed ? "Vollständiges SQL generiert" : "Keine Änderung";
   showSqlDetail();
 }
@@ -5839,7 +5896,7 @@ function clearSqlPreview(message = "Keine SQL-Vorschau") {
   state.renderedSql = null;
   state.renderedReportLanguage = null;
   if (elements.sqlPreview) {
-    elements.sqlPreview.textContent = message;
+    elements.sqlPreview.value = message;
   }
   if (elements.sqlPreviewInfo) {
     elements.sqlPreviewInfo.textContent = "Noch nicht generiert";
@@ -5970,8 +6027,9 @@ function bindEvents() {
      event.preventDefault();
      closeConfigStatistics();
    });
-   elements.configSelect.addEventListener("change", async () => {
-     state.configId = elements.configSelect.value;
+    elements.configSelect.addEventListener("change", async () => {
+      state.configId = elements.configSelect.value;
+      loadPaExportFilterForConfig();
      state.configStatistics = null;
      state.projectColumns = {};
      state.ruleTemplateAnalysis = null;
@@ -6016,24 +6074,25 @@ function bindEvents() {
      }
    });
    elements.searchInput.addEventListener("input", applyReportFilter);
-  elements.refreshBtn.addEventListener("click", loadReports);
-  elements.toast.addEventListener("mouseleave", startToastTimer);
-  elements.toastCopyBtn.addEventListener("click", copyToastMessage);
-  elements.toastCloseBtn.addEventListener("click", hideToast);
-  elements.runBtn.addEventListener("click", runSelectedReport);
-  elements.loadEditorBtn.addEventListener("click", loadEditorModel);
-  elements.validateEditorBtn.addEventListener("click", validateEditedModel);
-  elements.renderSqlBtn.addEventListener("click", renderGeneratedSql);
-  elements.writeNemoBtn.addEventListener("click", writeGeneratedSqlToNemo);
-  elements.resetEditorBtn.addEventListener("click", resetEditorModel);
-  elements.saveDraftBtn.addEventListener("click", saveEditorDraft);
-  elements.deleteDraftBtn.addEventListener("click", deleteEditorDraft);
-  elements.undoChangeBtn?.addEventListener("click", undoLastChange);
-  elements.restoreOriginalBtn?.addEventListener("click", restoreOriginalReport);
-  elements.groupToggleBtn?.addEventListener("click", toggleAllGroups);
-  elements.addGroupBtn?.addEventListener("click", openGroupWizard);
-  elements.addRuleBtn?.addEventListener("click", () => openRuleWizard());
-  elements.resultViewBtn.addEventListener("click", () => switchView("result"));
+   elements.refreshBtn.addEventListener("click", loadReports);
+   elements.toast.addEventListener("mouseleave", startToastTimer);
+   elements.toastCopyBtn.addEventListener("click", copyToastMessage);
+   elements.toastCloseBtn.addEventListener("click", hideToast);
+   elements.runBtn.addEventListener("click", runSelectedReport);
+   elements.loadEditorBtn.addEventListener("click", loadEditorModel);
+   elements.validateEditorBtn.addEventListener("click", validateEditedModel);
+   elements.renderSqlBtn.addEventListener("click", renderGeneratedSql);
+   if (elements.paExportFilterToggle) elements.paExportFilterToggle.addEventListener("change", onPaExportToggleChanged);
+   elements.writeNemoBtn.addEventListener("click", writeGeneratedSqlToNemo);
+   elements.resetEditorBtn.addEventListener("click", resetEditorModel);
+   elements.saveDraftBtn.addEventListener("click", saveEditorDraft);
+   elements.deleteDraftBtn.addEventListener("click", deleteEditorDraft);
+   elements.undoChangeBtn?.addEventListener("click", undoLastChange);
+   elements.restoreOriginalBtn?.addEventListener("click", restoreOriginalReport);
+   elements.groupToggleBtn?.addEventListener("click", toggleAllGroups);
+   elements.addGroupBtn?.addEventListener("click", openGroupWizard);
+   elements.addRuleBtn?.addEventListener("click", () => openRuleWizard());
+   elements.resultViewBtn.addEventListener("click", () => switchView("result"));
   elements.editorViewBtn.addEventListener("click", () => switchView("editor"));
   elements.harmonizationViewBtn.addEventListener("click", () => switchView("harmonization"));
   elements.refreshHarmonizationBtn.addEventListener("click", loadHarmonization);

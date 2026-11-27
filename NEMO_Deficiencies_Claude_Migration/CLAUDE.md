@@ -45,7 +45,7 @@ Wichtige Arbeitskonventionen:
 - PyInstaller/Inno Setup fuer Windows-Builds
 - GitHub-Releases als Ziel fuer verteilbare Artefakte
 
-Aktuelle App-Version laut Paket: `1.7.1`.
+Aktuelle App-Version laut Paket: `1.7.2`.
 
 ## Wichtige Begriffe
 

@@ -2734,19 +2734,34 @@ th {
   border-bottom: 1px solid var(--border);
 }
 
-.sql-preview {
-  margin: 0;
+.sql-preview-container {
+  position: relative;
   min-height: 0;
-  max-height: none;
-  overflow: auto;
+  overflow: hidden;
+  flex: 1;
+}
+
+.sql-preview-editor {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  border: none;
   background: color-mix(in srgb, var(--surface-2) 65%, var(--surface));
   color: var(--text);
-  padding: 12px;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.45;
   white-space: pre;
   tab-size: 4;
+  resize: none;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.sql-preview-highlight {
+  display: none;
 }
 
 @media (max-width: 760px) {
@@ -2825,4 +2840,37 @@ th {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* ---- pa_export-Filter-Schalter (vor der SQL-Vorschau) ---- */
+.pa-export-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 2px solid var(--accent, #4F7DF3);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pa-export-toggle[hidden] {
+  display: none;
+}
+
+.pa-export-toggle.off {
+  border-color: var(--border);
+  font-weight: 500;
+}
+
+.pa-export-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.pa-export-toggle small {
+  font-size: 0.8rem;
+  color: var(--muted);
 }

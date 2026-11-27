@@ -9,7 +9,7 @@ class FrontendTest(unittest.TestCase):
         self.assertTrue((FRONTEND_DIR / "styles.css").exists())
         self.assertTrue((FRONTEND_DIR / "app.js").exists())
         self.assertIn("X-Request-ID", (FRONTEND_DIR / "app.js").read_text(encoding="utf-8"))
-        self.assertIn("12000", (FRONTEND_DIR / "app.js").read_text(encoding="utf-8"))
+        self.assertIn("25000", (FRONTEND_DIR / "app.js").read_text(encoding="utf-8"))
         self.assertIn("message = apiDetailText(payload.detail) || message", (FRONTEND_DIR / "app.js").read_text(encoding="utf-8"))
 
     def test_cli_wizard_assets_and_route_exist(self) -> None:

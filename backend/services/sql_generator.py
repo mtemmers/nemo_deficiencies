@@ -338,50 +338,44 @@ def has_pa_export_restriction(sql: str) -> bool:
 
 def apply_pa_export_filter(sql: str, enabled: bool) -> str:
     """
-    Schaltet die pa_export-Einschränkung ein oder aus.
-
-    Ein: Das SQL bleibt unverändert.
-    Aus: Die CTEs mit pa_export werden auskommentiert. Der Quell-CTE wird direkt in
-         checks bzw. in die Hauptabfrage verwendet (kein INNER JOIN auf pa_export).
-         Der Benutzer kann die CTEs später im SQL-Editor manuell wieder einzukommentieren.
-    Ist keine Einschränkung im SQL vorhanden, bleibt das SQL unverändert.
+    Toggle pa_export Filter durch FROM-Umschaltung in checks CTE.
+    
+    enabled=True: FROM joined (CTE3 mit pa_export Filter)
+    enabled=False: FROM <CTE1_NAME> (CTE1 direkt, alle Daten)
     """
-    if enabled or not has_pa_export_restriction(sql):
+    if not has_pa_export_restriction(sql):
         return sql
-
-    result = sql
     
-    # Sammle alle CTEs die auskommentiert werden sollen mit ihren Positionen
-    ctes_to_comment = []
+    checks_range = find_checks_cte(sql)
+    if not checks_range:
+        return sql
     
-    # 1. Prozess-CTE(s) mit pa_export
-    for cte_name in _pa_export_cte_names(result):
-        cte_range = find_named_cte(result, cte_name)
-        if cte_range:
-            ctes_to_comment.append(cte_range)
-
-    # 2. Verknüpfungs-CTE (INNER JOIN auf die pa_export CTEs)
-    for cte_name in _join_cte_names(sql):
-        cte_range = find_named_cte(result, cte_name)
-        if cte_range:
-            ctes_to_comment.append(cte_range)
-
-    # Sortiere CTE-Ranges in absteigender Reihenfolge (von hinten nach vorne)
-    # damit die Positionen nicht verschoben werden
-    ctes_to_comment.sort(key=lambda r: r.start, reverse=True)
+    checks_body = sql[checks_range.open_paren + 1 : checks_range.close_paren]
     
-    # Kommentiere alle CTEs in umgekehrter Reihenfolge
-    for cte_range in ctes_to_comment:
-        result = _comment_out_cte(result, cte_range)
-
-    # 3. Verweise auf die auskommentierten CTEs umbiegen:
-    #    FROM joined j   ->   FROM customer_source j
-    source_name = _source_cte_name(sql)
-    if source_name:
-        for cte_name in _join_cte_names(sql):
-            result = re.sub(rf"(?im)\bFROM\s+{re.escape(cte_name)}\b", f"FROM {source_name}", result)
-
-    return result
+    # Finde den Namen von CTE1 (erste CTE)
+    first_cte_match = re.search(r"(?im)^\s*(?:WITH\s+)?([A-Za-z_][\w]*)\s+AS\s*\(", sql)
+    if not first_cte_match:
+        return sql
+    cte1_name = first_cte_match.group(1)
+    
+    if enabled:
+        # Toggle AN: FROM joined
+        new_body = re.sub(
+            rf"(?im)^\s*FROM\s+{re.escape(cte1_name)}\b",
+            "FROM joined",
+            checks_body,
+            count=1
+        )
+    else:
+        # Toggle AUS: FROM <CTE1_NAME>
+        new_body = re.sub(
+            r"(?im)^\s*FROM\s+joined\b",
+            f"FROM {cte1_name}",
+            checks_body,
+            count=1
+        )
+    
+    return sql[:checks_range.open_paren + 1] + new_body + sql[checks_range.close_paren:]
 
 
 def _pa_export_cte_names(sql: str) -> list[str]:
@@ -413,15 +407,17 @@ def _join_cte_names(sql: str) -> list[str]:
 
 
 def _source_cte_name(sql: str) -> str:
-    """Quell-CTE mit dem MASTER_DATA_SUB_TYPE-Filter (z.B. customer_source)."""
+    """Erste CTE, die NICHT pa_export enthält und NICHT ein JOIN-CTE ist."""
+    pa_export_names = _pa_export_cte_names(sql)
+    join_names = _join_cte_names(sql)
+    
     for match in re.finditer(r"(?im)^\s*(?:WITH\s+)?([A-Za-z_][\w]*)\s+AS\s*\(", sql):
-         name = match.group(1)
-         cte_range = find_named_cte(sql, name)
-         if not cte_range:
-             continue
-         body = sql[cte_range.open_paren + 1 : cte_range.close_paren]
-         if re.search(r"(?i)MASTER_DATA_SUB_TYPE", body) and not PA_EXPORT_MARKER.search(body):
-             return name
+        name = match.group(1)
+        # Skip pa_export CTEs und JOIN CTEs
+        if name in pa_export_names or name in join_names:
+            continue
+        # Diese CTE ist der Source
+        return name
     return ""
 
 
