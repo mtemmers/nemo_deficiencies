@@ -258,6 +258,9 @@ const elements = {
   sqlPreviewInfo: document.querySelector("#sqlPreviewInfo"),
   sqlPreview: document.querySelector("#sqlPreview"),
   toast: document.querySelector("#toast"),
+  toastText: document.querySelector("#toastText"),
+  toastCopyBtn: document.querySelector("#toastCopyBtn"),
+  toastCloseBtn: document.querySelector("#toastCloseBtn"),
 };
 
 const UI_TEXT_EN = {
@@ -553,10 +556,54 @@ function setStatus(text, variant = "neutral") {
 }
 
 function showToast(message) {
-  elements.toast.textContent = message;
+  const text = String(message ?? "");
+  if (elements.toastText) {
+    elements.toastText.textContent = text;
+  } else {
+    elements.toast.textContent = text;
+  }
+  elements.toast.dataset.message = text;
   elements.toast.classList.add("visible");
+  startToastTimer();
+}
+
+function startToastTimer() {
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => elements.toast.classList.remove("visible"), 12000);
+  if (elements.toast.matches(":hover")) return;
+  showToast.timer = window.setTimeout(hideToast, 25000);
+}
+
+function hideToast() {
+  window.clearTimeout(showToast.timer);
+  elements.toast.classList.remove("visible");
+}
+
+async function copyToastMessage() {
+  const text = elements.toast.dataset.message || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    showToastCopyFeedback("Kopiert");
+  } catch (error) {
+    // Fallback for contexts without the async clipboard API
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    showToastCopyFeedback(ok ? "Kopiert" : "Kopieren fehlgeschlagen");
+  }
+}
+
+function showToastCopyFeedback(label) {
+  if (!elements.toastCopyBtn) return;
+  elements.toastCopyBtn.textContent = label;
+  window.setTimeout(() => {
+    elements.toastCopyBtn.textContent = "Kopieren";
+  }, 1500);
 }
 
 function activeConfig() {
@@ -5970,6 +6017,9 @@ function bindEvents() {
    });
    elements.searchInput.addEventListener("input", applyReportFilter);
   elements.refreshBtn.addEventListener("click", loadReports);
+  elements.toast.addEventListener("mouseleave", startToastTimer);
+  elements.toastCopyBtn.addEventListener("click", copyToastMessage);
+  elements.toastCloseBtn.addEventListener("click", hideToast);
   elements.runBtn.addEventListener("click", runSelectedReport);
   elements.loadEditorBtn.addEventListener("click", loadEditorModel);
   elements.validateEditorBtn.addEventListener("click", validateEditedModel);

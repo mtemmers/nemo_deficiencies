@@ -588,7 +588,11 @@
     </form>
   </dialog>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite">
+    <span id="toastText" class="toast-text"></span>
+    <button id="toastCopyBtn" class="toast-action" type="button" title="Meldung in die Zwischenablage kopieren">Kopieren</button>
+    <button id="toastCloseBtn" class="toast-action" type="button" aria-label="Meldung schließen" title="Schließen">×</button>
+  </div>
   <script src="/assets/app.js?v=20260810-version-export" defer></script>
 </body>
 </html>
