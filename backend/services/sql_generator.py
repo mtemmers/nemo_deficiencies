@@ -63,12 +63,19 @@ def render_top_25_sql(sql: str) -> str:
     return f"{prefix}{final_select}\nORDER BY ERROREVALUATION DESC\n"
 
 
-def render_sql_from_model(original_sql: str, editor_model: Dict[str, Any]) -> SqlRenderResult:
+def render_sql_from_model(
+    original_sql: str,
+    editor_model: Dict[str, Any],
+    pa_export_filter: Optional[bool] = None,
+) -> SqlRenderResult:
     model = normalize_editor_model(editor_model)
     new_source_attributes = missing_source_attributes(original_sql, model)
     sql_with_source = apply_source_attributes(original_sql, model)
     sql_with_source = append_attributes_to_description2(sql_with_source, new_source_attributes)
+    if pa_export_filter is not None:
+        sql_with_source = apply_pa_export_filter(sql_with_source, pa_export_filter)
     cte_range = find_checks_cte(sql_with_source)
+
     original_checks_sql = ""
     if cte_range:
         original_checks_sql = sql_with_source[cte_range.start:cte_range.end]
@@ -320,6 +327,155 @@ def localize_dimension(value: str, language: str) -> str:
         "Verständlichkeit": "Understandability",
         "Ohne Typ": "Without type",
     }.get(value, value)
+
+PA_EXPORT_MARKER = re.compile(r"\$schema\.\"?pa_export\"?", re.IGNORECASE)
+
+
+def has_pa_export_restriction(sql: str) -> bool:
+    """True, wenn das Original-SQL die pa_export-Einschränkung (CTE mit pa_export) enthält."""
+    return bool(PA_EXPORT_MARKER.search(sql or ""))
+
+
+def apply_pa_export_filter(sql: str, enabled: bool) -> str:
+    """
+    Schaltet die pa_export-Einschränkung ein oder aus.
+
+    Ein: Das SQL bleibt unverändert.
+    Aus: Die CTEs mit pa_export werden auskommentiert. Der Quell-CTE wird direkt in
+         checks bzw. in die Hauptabfrage verwendet (kein INNER JOIN auf pa_export).
+         Der Benutzer kann die CTEs später im SQL-Editor manuell wieder einzukommentieren.
+    Ist keine Einschränkung im SQL vorhanden, bleibt das SQL unverändert.
+    """
+    if enabled or not has_pa_export_restriction(sql):
+        return sql
+
+    result = sql
+    
+    # Sammle alle CTEs die auskommentiert werden sollen mit ihren Positionen
+    ctes_to_comment = []
+    
+    # 1. Prozess-CTE(s) mit pa_export
+    for cte_name in _pa_export_cte_names(result):
+        cte_range = find_named_cte(result, cte_name)
+        if cte_range:
+            ctes_to_comment.append(cte_range)
+
+    # 2. Verknüpfungs-CTE (INNER JOIN auf die pa_export CTEs)
+    for cte_name in _join_cte_names(sql):
+        cte_range = find_named_cte(result, cte_name)
+        if cte_range:
+            ctes_to_comment.append(cte_range)
+
+    # Sortiere CTE-Ranges in absteigender Reihenfolge (von hinten nach vorne)
+    # damit die Positionen nicht verschoben werden
+    ctes_to_comment.sort(key=lambda r: r.start, reverse=True)
+    
+    # Kommentiere alle CTEs in umgekehrter Reihenfolge
+    for cte_range in ctes_to_comment:
+        result = _comment_out_cte(result, cte_range)
+
+    # 3. Verweise auf die auskommentierten CTEs umbiegen:
+    #    FROM joined j   ->   FROM customer_source j
+    source_name = _source_cte_name(sql)
+    if source_name:
+        for cte_name in _join_cte_names(sql):
+            result = re.sub(rf"(?im)\bFROM\s+{re.escape(cte_name)}\b", f"FROM {source_name}", result)
+
+    return result
+
+
+def _pa_export_cte_names(sql: str) -> list[str]:
+    names: list[str] = []
+    for match in re.finditer(r"(?im)^\s*(?:WITH\s+)?([A-Za-z_][\w]*)\s+AS\s*\(", sql):
+        name = match.group(1)
+        cte_range = find_named_cte(sql, name)
+        if not cte_range:
+            continue
+        body = sql[cte_range.open_paren + 1 : cte_range.close_paren]
+        if PA_EXPORT_MARKER.search(body) and name not in names:
+            names.append(name)
+    return names
+
+
+def _join_cte_names(sql: str) -> list[str]:
+    names: list[str] = []
+    for match in re.finditer(r"(?im)^\s*(?:WITH\s+)?([A-Za-z_][\w]*)\s+AS\s*\(", sql):
+        name = match.group(1)
+        cte_range = find_named_cte(sql, name)
+        if not cte_range:
+            continue
+        body = sql[cte_range.open_paren + 1 : cte_range.close_paren]
+        if re.search(r"(?i)\bINNER\s+JOIN\b", body) and any(
+            re.search(rf"(?i)\b{re.escape(pa)}\b", body) for pa in _pa_export_cte_names(sql)
+        ) and name not in names:
+            names.append(name)
+    return names
+
+
+def _source_cte_name(sql: str) -> str:
+    """Quell-CTE mit dem MASTER_DATA_SUB_TYPE-Filter (z.B. customer_source)."""
+    for match in re.finditer(r"(?im)^\s*(?:WITH\s+)?([A-Za-z_][\w]*)\s+AS\s*\(", sql):
+         name = match.group(1)
+         cte_range = find_named_cte(sql, name)
+         if not cte_range:
+             continue
+         body = sql[cte_range.open_paren + 1 : cte_range.close_paren]
+         if re.search(r"(?i)MASTER_DATA_SUB_TYPE", body) and not PA_EXPORT_MARKER.search(body):
+             return name
+    return ""
+
+
+def _comment_out_cte(sql: str, cte_range: CteRange) -> str:
+    """
+    Kommentiert einen CTE aus, statt ihn zu entfernen.
+    Dies ermöglicht es dem Benutzer, die CTE später im SQL-Editor manuell wieder einzukommentieren.
+    
+    - Existierende Kommentarblöcke vor der CTE werden NICHT verändert (sie sind ja bereits Kommentare)
+    - Nur die CTE-Definition (z.B. "process_source AS (...)") wird auskommentiert
+    - Nachfolgende Kommas werden korrekt behandelt
+    """
+    start = cte_range.start
+    # CTE-Inhalt auslesen (alles von start bis end)
+    cte_content = sql[start:cte_range.end]
+    
+    # Nachfolgende Komma und Leerzeichen handhaben
+    end = cte_range.end
+    comma_match = re.match(r"\s*,", sql[end:])
+    has_comma = bool(comma_match)
+    if comma_match:
+        end += comma_match.end()
+    
+    # Kommentieren: Jede Zeile mit "-- " präfixen (aber nicht Leerzeilen)
+    commented_lines = []
+    for line in cte_content.split("\n"):
+        if line.strip():
+            commented_lines.append("-- " + line)
+        else:
+            commented_lines.append("")
+    commented_cte = "\n".join(commented_lines)
+    
+    # Wenn es ein Komma gab, nach dem Kommentar ein Komma hinzufügen mit Leerzeile
+    if has_comma:
+        commented_cte += ",\n"
+    
+    return sql[:start] + commented_cte + sql[end:].lstrip("\n")
+
+
+def _remove_cte(sql: str, cte_range: CteRange) -> str:
+    """Entfernt einen CTE inklusive nachfolgendem Komma und dem davor stehenden Kommentarblock."""
+    start = cte_range.start
+    # Kommentarblock direkt oberhalb des CTE mit entfernen (-- ----- / -- CTE n: ... / --)
+    head = sql[:start]
+    comment_block = re.search(r"(?:\n[ \t]*--[^\n]*)+\s*\Z", head)
+    if comment_block and ("CTE" in comment_block.group(0).upper() or "----" in comment_block.group(0)):
+        start = comment_block.start() + (1 if comment_block.group(0).startswith("\n") else 0)
+    end = cte_range.end
+    comma = re.match(r"\s*,", sql[end:])
+    if comma:
+        end += comma.end()
+    return sql[:start].rstrip() + "\n" + sql[end:].lstrip("\n")
+
+
 
 def find_checks_cte(sql: str) -> Optional[CteRange]:
     match = re.search(r"(?im)^\s*checks\s+AS\s*\(", sql)
