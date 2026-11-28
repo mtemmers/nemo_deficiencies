@@ -85,9 +85,11 @@ textarea {
 }
 
 .app-shell {
+  --sidebar-width: 390px;
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: block;
 }
 
 .topbar {
@@ -114,10 +116,6 @@ textarea {
 .language-field,
 .report-language-field {
   min-width: 132px;
-}
-
-.report-language-field {
-  margin-right: auto;
 }
 
 .brand,
@@ -172,74 +170,73 @@ textarea {
 .workspace {
   display: grid;
   grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   transition: grid-template-columns 160ms ease;
 }
 
 .sidebar {
   min-width: 0;
-  min-height: calc(100vh - 64px);
-  max-height: 100vh;
+  min-height: 0;
+  height: 100%;
   border-right: 1px solid var(--border);
   background: var(--surface);
   display: grid;
-  grid-template-rows: auto 1fr;
-  overflow: hidden;
-  position: sticky;
-  top: 0;
-  align-self: start;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: visible;
+  position: relative;
+  align-self: stretch;
+  z-index: 2;
 }
 
 .sidebar-rail {
-  min-height: 48px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 8px;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
+  padding: 10px 12px;
+  position: relative;
   z-index: 10;
   background: var(--surface);
 }
 
 .sidebar-toggle {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
   display: inline-grid;
   place-items: center;
   cursor: pointer;
 }
 
-.sidebar-toggle-icon {
-  width: 16px;
-  height: 12px;
-  position: relative;
-  display: block;
+.sidebar-toggle:hover,
+.sidebar-toggle:focus-visible {
+  background: var(--surface-2);
+  color: var(--text);
+  outline: none;
 }
 
-.sidebar-toggle-icon::before,
-.sidebar-toggle-icon::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  width: 16px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
+.sidebar-toggle-icon {
+  width: 19px;
+  height: 16px;
+  position: relative;
+  display: block;
+  border: 1.8px solid currentColor;
+  border-radius: 4px;
 }
 
 .sidebar-toggle-icon::before {
-  top: 1px;
-  box-shadow: 0 5px 0 currentColor;
-}
-
-.sidebar-toggle-icon::after {
-  bottom: 1px;
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: currentColor;
 }
 
 .sidebar-content {
@@ -253,20 +250,149 @@ textarea {
 }
 
 .sidebar-collapsed .sidebar {
-  grid-template-rows: auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .sidebar-collapsed .sidebar-rail {
   justify-content: center;
-  border-bottom: 0;
+  padding-inline: 6px;
 }
 
 .sidebar-collapsed .sidebar-content {
   display: none;
 }
 
-.sidebar-collapsed .sidebar-toggle-icon {
-  transform: rotate(90deg);
+.sidebar-collapsed .sidebar-footer {
+  grid-row: 3;
+  padding: 6px 4px;
+}
+
+.sidebar-collapsed .settings-menu-trigger {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar-collapsed .settings-label {
+  display: none;
+}
+
+.sidebar-footer {
+  position: relative;
+  grid-row: 3;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-collapsed {
+  --sidebar-width: 52px;
+}
+
+.settings-menu {
+  position: relative;
+}
+
+.settings-menu-trigger {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.settings-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.settings-menu-trigger:hover,
+.settings-menu[open] > .settings-menu-trigger {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.settings-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.settings-popover {
+  position: fixed;
+  z-index: 30;
+  left: calc(var(--sidebar-width) + 12px);
+  bottom: 12px;
+  width: min(286px, calc(100vw - var(--sidebar-width) - 24px));
+  max-height: min(62dvh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.settings-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-brand .brand-mark {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.settings-brand .brand-text {
+  gap: 3px 6px;
+  font-size: 12px;
+}
+
+.settings-brand .brand-text strong {
+  font-size: 13px;
+}
+
+.settings-ai-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.settings-popover .button,
+.settings-popover .mode-switch,
+.settings-popover .compact-field,
+.settings-popover > a {
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-popover .button,
+.settings-popover > a {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.settings-popover .segmented button,
+.settings-popover select {
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+
+.settings-popover .compact-field {
+  display: grid;
+  gap: 4px;
 }
 
 .control-band {
@@ -1256,17 +1382,30 @@ th {
 }
 
 @media (max-width: 980px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
   .workspace,
   .sidebar-collapsed .workspace {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .sidebar {
     min-height: auto;
-    max-height: none;
+    height: auto;
     position: static;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .settings-popover {
+    left: 12px;
+    bottom: 12px;
+    width: min(286px, calc(100vw - 24px));
+    max-height: 70dvh;
   }
 
   .sidebar-collapsed .sidebar {
@@ -1744,18 +1883,6 @@ th {
 
 .mode-standard .expert-only {
   display: none !important;
-}
-
-.mode-standard .sidebar {
-  grid-template-rows: 1fr;
-}
-
-.mode-standard.sidebar-collapsed .workspace {
-  grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
-}
-
-.mode-standard.sidebar-collapsed .sidebar-content {
-  display: grid;
 }
 
 .mode-standard .detail-pane {
@@ -2348,6 +2475,11 @@ th {
   min-height: 120px;
   resize: vertical;
   line-height: 1.45;
+}
+
+.condition-input,
+.candidate-condition {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .block-context-value {

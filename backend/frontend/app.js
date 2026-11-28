@@ -446,6 +446,7 @@ const UI_TEXT_EN = {
   "API-Key": "API key",
   "Passwort": "Password",
   "Dialog schließen": "Close dialog",
+  "Einstellungen": "Settings",
   "Linke Spalte einklappen": "Collapse left column",
   "Linke Spalte ausklappen": "Expand left column",
 };
@@ -2999,7 +3000,7 @@ function renderRuleDetail() {
   }
 
   const conditionInput = document.createElement("textarea");
-  conditionInput.className = "parameter-textarea";
+  conditionInput.className = "parameter-textarea condition-input";
   conditionInput.value = rule.condition || "";
   conditionInput.rows = 5;
   let committedCondition = rule.condition || "";
@@ -4736,7 +4737,7 @@ function openRuleWizard(initialGroupIndex = null) {
   }
 
   const conditionInput = document.createElement("textarea");
-  conditionInput.className = "parameter-textarea";
+  conditionInput.className = "parameter-textarea condition-input";
   conditionInput.rows = 5;
 
   const messageInput = document.createElement("input");

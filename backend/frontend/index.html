@@ -5,56 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>NEMO Deficiencies</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20261128-result-preview-6">
+  <link rel="stylesheet" href="/assets/styles.css?v=20261128-condition-monospace-1">
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">ND</span>
-        <div class="brand-text">
-          <strong>NEMO Deficiencies</strong>
-          <span id="appVersion" class="connection-state">v-</span>
-          <span id="connectionState" class="connection-state">lokal</span>
-        </div>
-      </div>
-      <div class="top-actions">
-        <label class="compact-field language-field" for="uiLanguageSelect">
-          <span>Sprache</span>
-          <select id="uiLanguageSelect">
-            <option value="de">Deutsch</option>
-            <option value="en">English</option>
-          </select>
-        </label>
-        <span id="aiConnectionState" class="connection-state">KI nicht eingerichtet</span>
-        <select id="aiProfileSelect" class="ai-profile-select" aria-label="Aktive KI auswählen" title="Aktive KI auswählen" hidden></select>
-        <button id="aiConfigBtn" class="button secondary" type="button">KI-Zugang</button>
-        <button id="ruleTemplateCatalogBtn" class="button secondary expert-only" type="button">Regelkatalog</button>
-        <div class="mode-switch segmented" role="group" aria-label="Bedienmodus">
-          <button id="standardModeBtn" type="button" aria-pressed="true">Standard</button>
-          <button id="expertModeBtn" type="button" aria-pressed="false">Experte</button>
-        </div>
-        <label class="compact-field expert-only" for="themeSelect">
-          <span>Schema</span>
-          <select id="themeSelect">
-            <option value="system">System</option>
-            <option value="light">Hell</option>
-            <option value="dark">Dunkel</option>
-          </select>
-        </label>
-        <a id="cliWizardLink" class="button secondary" href="/cli-wizard">CLI-Wizard</a>
-        <a class="button secondary expert-only" href="/docs" target="_blank" rel="noreferrer">API</a>
-      </div>
-    </header>
-
     <main class="workspace">
       <aside class="sidebar" aria-label="Reportauswahl">
-        <div class="sidebar-rail expert-only">
-          <button id="sidebarToggleBtn" class="sidebar-toggle" type="button" aria-label="Linke Spalte einklappen" aria-expanded="true" title="Linke Spalte einklappen">
+        <div class="sidebar-rail">
+          <button id="sidebarToggleBtn" class="sidebar-toggle" type="button" aria-controls="sidebarContent" aria-label="Linke Spalte einklappen" aria-expanded="true" title="Linke Spalte einklappen">
             <span class="sidebar-toggle-icon" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="sidebar-content">
+        <div id="sidebarContent" class="sidebar-content">
           <div class="control-band">
              <label class="field" for="configSelect">
                <span>Konfiguration</span>
@@ -83,6 +45,58 @@
           </div>
 
           <div id="reportList" class="report-list" role="listbox" aria-label="Reports"></div>
+        </div>
+        <div class="sidebar-footer">
+          <details class="settings-menu">
+            <summary class="settings-menu-trigger" aria-label="Einstellungen" title="Einstellungen">
+              <span class="settings-icon" aria-hidden="true">⚙</span>
+              <span class="settings-label">Einstellungen</span>
+            </summary>
+            <section class="settings-popover" aria-label="Einstellungen">
+              <div class="settings-brand">
+                <span class="brand-mark" aria-hidden="true">ND</span>
+                <div class="brand-text">
+                  <strong>NEMO Deficiencies</strong>
+                  <span id="appVersion" class="connection-state">v-</span>
+                  <span id="connectionState" class="connection-state">lokal</span>
+                </div>
+              </div>
+              <label class="compact-field language-field" for="uiLanguageSelect">
+                <span>Sprache</span>
+                <select id="uiLanguageSelect">
+                  <option value="de">Deutsch</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <label class="compact-field report-language-field" for="reportLanguageSelect">
+                <span>Berichtssprache</span>
+                <select id="reportLanguageSelect">
+                  <option value="de">Deutsch</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <div class="settings-ai-row">
+                <span id="aiConnectionState" class="connection-state">KI nicht eingerichtet</span>
+                <select id="aiProfileSelect" class="ai-profile-select" aria-label="Aktive KI auswählen" title="Aktive KI auswählen" hidden></select>
+              </div>
+              <button id="aiConfigBtn" class="button secondary" type="button">KI-Zugang</button>
+              <button id="ruleTemplateCatalogBtn" class="button secondary" type="button">Regelkatalog</button>
+              <div class="mode-switch segmented" role="group" aria-label="Bedienmodus">
+                <button id="standardModeBtn" type="button" aria-pressed="true">Standard</button>
+                <button id="expertModeBtn" type="button" aria-pressed="false">Experte</button>
+              </div>
+              <label class="compact-field" for="themeSelect">
+                <span>Schema</span>
+                <select id="themeSelect">
+                  <option value="system">System</option>
+                  <option value="light">Hell</option>
+                  <option value="dark">Dunkel</option>
+                </select>
+              </label>
+              <a id="cliWizardLink" class="button secondary" href="/cli-wizard">CLI-Wizard</a>
+              <a class="button secondary" href="/docs" target="_blank" rel="noreferrer">API</a>
+            </section>
+          </details>
         </div>
       </aside>
 
@@ -150,13 +164,6 @@
               <span id="editorInfo" class="meta-line expert-only">-</span>
               <button id="loadEditorBtn" class="button secondary expert-only" type="button" disabled>Modell laden</button>
               <button id="validateEditorBtn" class="button secondary expert-only" type="button" disabled>Validieren</button>
-              <label class="compact-field report-language-field" for="reportLanguageSelect">
-                <span>Berichtssprache</span>
-                <select id="reportLanguageSelect">
-                  <option value="de">Deutsch</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
               <label class="pa-export-toggle" id="paExportToggleWrap" title="Schränkt die Prüfung auf Datensätze ein, die in pa_export vorkommen (CTE 2 und 3).">
                 <input type="checkbox" id="paExportFilterToggle">
                 <span>Nur prozessrelevante Datensätze (pa_export)</span>
@@ -568,7 +575,7 @@
           </label>
           <label class="field" for="ruleTemplateConditionInput">
             <span>Bedingung mit {field}</span>
-            <textarea id="ruleTemplateConditionInput" class="code-input" rows="3" required maxlength="100000"></textarea>
+            <textarea id="ruleTemplateConditionInput" class="code-input condition-input" rows="3" required maxlength="100000"></textarea>
           </label>
           <div class="rule-template-meta-grid">
             <label class="field" for="ruleTemplateDimensionInput">
@@ -634,6 +641,6 @@
     <button id="toastCopyBtn" class="toast-action" type="button" title="Meldung in die Zwischenablage kopieren">Kopieren</button>
     <button id="toastCloseBtn" class="toast-action" type="button" aria-label="Meldung schließen" title="Schließen">×</button>
   </div>
-  <script src="/assets/app.js?v=20261128-result-preview-6" defer></script>
+  <script src="/assets/app.js?v=20261128-condition-monospace-1" defer></script>
 </body>
 </html>
