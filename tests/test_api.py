@@ -24,6 +24,8 @@ from backend.main import (
     RuleTemplateBindingRequest,
     RuleTemplateResolveRequest,
     _resolve_top_25_report,
+    _sql_fingerprint,
+    _render_sql_payload,
     _load_reports,
     _nemo_error_summary,
     health,
@@ -555,12 +557,52 @@ class ApiTest(unittest.TestCase):
             self.assertNotIn("password", config)
             self.assertNotIn("url", config)
 
+    def test_write_to_nemo_rejects_changed_sql_before_rendering(self) -> None:
+        request = NemoReportWriteRequest(
+            configId="config-1",
+            editorModel={"checks": {"groups": []}},
+            overwriteConfirmation="deficiencies_customers",
+            baseSqlHash=_sql_fingerprint("SELECT 'old version' FROM DUMMY"),
+        )
+        with (
+            patch("backend.main._load_reports", return_value=(SimpleNamespace(id="config-1"), [existing_report()])),
+            patch("backend.main.render_sql_from_model") as render_mock,
+            patch("backend.main.update_reports_sql") as update_mock,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                _render_sql_payload("report-1", request)
+        self.assertEqual(409, raised.exception.status_code)
+        render_mock.assert_not_called()
+        update_mock.assert_not_called()
+
+    def test_write_to_nemo_rechecks_sql_after_rendering(self) -> None:
+        request = NemoReportWriteRequest(
+            configId="config-1",
+            editorModel={"checks": {"groups": []}},
+            overwriteConfirmation="deficiencies_customers",
+            baseSqlHash=_sql_fingerprint(existing_report()["querySyntax"]),
+        )
+        changed_report = {**existing_report(), "querySyntax": "SELECT 2 FROM DUMMY"}
+        with (
+            patch("backend.main._render_sql_payload", return_value=rendered_payload()),
+            patch("backend.main._nemo_for_config", return_value=fake_nemo_context()),
+            patch("backend.main.get_reports", return_value=[changed_report, top_25_report()]),
+            patch("backend.main._baseline_store") as baseline_mock,
+            patch("backend.main.update_reports_sql") as update_mock,
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                write_report_to_nemo("report-1", request)
+        self.assertEqual(409, raised.exception.status_code)
+        baseline_mock.assert_not_called()
+        update_mock.assert_not_called()
+
     def test_write_to_nemo_rejects_wrong_confirmation(self) -> None:
         request = NemoReportWriteRequest(
             configId="config-1",
             project="Master Data",
             editorModel={"checks": {"groups": []}},
             overwriteConfirmation="wrong_report",
+            baseSqlHash=_sql_fingerprint(existing_report()["querySyntax"]),
         )
         with (
             patch("backend.main._render_sql_payload", return_value=rendered_payload()),
@@ -580,6 +622,7 @@ class ApiTest(unittest.TestCase):
             project="Master Data",
             editorModel={"checks": {"groups": []}},
             overwriteConfirmation="deficiencies_customers",
+            baseSqlHash=_sql_fingerprint(existing_report()["querySyntax"]),
         )
         with (
             patch("backend.main._render_sql_payload", return_value=rendered_payload()),
@@ -590,6 +633,7 @@ class ApiTest(unittest.TestCase):
         ):
             result = write_report_to_nemo("report-1", request)
 
+        self.assertEqual(_sql_fingerprint(rendered_payload()["sql"]), result["reportSqlHash"])
         self.assertEqual("updated", result["status"])
         self.assertEqual("deficiencies_customers", result["internalName"])
         update_mock.assert_called_once()
@@ -607,6 +651,7 @@ class ApiTest(unittest.TestCase):
             project="Master Data",
             editorModel={"checks": {"groups": []}},
             overwriteConfirmation="deficiencies_customers",
+            baseSqlHash=_sql_fingerprint(existing_report()["querySyntax"]),
         )
         with (
             patch("backend.main._render_sql_payload", return_value=rendered_payload()),
@@ -676,6 +721,7 @@ class ApiTest(unittest.TestCase):
             project="Master Data",
             editorModel={"checks": {"groups": []}},
             overwriteConfirmation="deficiencies_customers_top_25",
+            baseSqlHash=_sql_fingerprint(report["querySyntax"]),
         )
         with (
             patch("backend.main._render_sql_payload", return_value=payload),

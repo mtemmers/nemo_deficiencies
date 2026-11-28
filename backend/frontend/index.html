@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>NEMO Deficiencies</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260810-version-export">
+  <link rel="stylesheet" href="/assets/styles.css?v=20261128-result-preview-6">
 </head>
 <body>
   <div class="app-shell">
@@ -163,6 +163,7 @@
                 <small id="paExportFilterState">an</small>
               </label>
               <button id="renderSqlBtn" class="button secondary" type="button" disabled>SQL-Vorschau</button>
+              <button id="runSqlPreviewBtn" class="button secondary" type="button" disabled>Ergebnisvorschau</button>
               <button id="writeNemoBtn" class="button secondary danger" type="button" disabled>In NEMO speichern</button>
               <button id="resetEditorBtn" class="button secondary expert-only" type="button" disabled>Zurücksetzen</button>
               <button id="saveDraftBtn" class="button primary expert-only" type="button" disabled>Draft speichern</button>
@@ -321,6 +322,39 @@
         <button id="saveConfigBtn" class="button primary" type="submit">Neu anlegen</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="sqlResultDialog" class="config-dialog statistics-dialog sql-result-dialog" aria-labelledby="sqlResultTitle">
+    <div class="sql-result-dialog-layout">
+      <div class="dialog-head">
+        <div><h2 id="sqlResultTitle">Ergebnisvorschau</h2><span id="sqlResultReportName" class="meta-line"></span></div>
+        <button id="closeSqlResultBtn" class="icon-button" type="button" aria-label="Dialog schließen">×</button>
+      </div>
+      <div id="sqlResultMetrics" class="statistics-metrics" aria-live="polite"></div>
+      <section id="sqlResultQuality" class="sql-quality-card" aria-label="Datenqualität" hidden>
+        <div class="sql-quality-heading"><h3>Prüfergebnis</h3><span id="sqlResultQualityRate"></span></div>
+        <div id="sqlResultQualityBar" class="sql-quality-bar" role="img">
+          <span id="sqlResultPassedBar" class="sql-quality-passed"></span>
+          <span id="sqlResultFailedBar" class="sql-quality-failed"></span>
+        </div>
+        <div class="sql-quality-legend">
+          <span class="sql-quality-pass-label"><i></i><span id="sqlResultPassedLabel"></span></span>
+          <span class="sql-quality-fail-label"><i></i><span id="sqlResultFailedLabel"></span></span>
+        </div>
+      </section>
+      <p id="sqlResultInfo" class="meta-line" role="status">Noch nicht ausgeführt</p>
+      <div id="sqlResultLoading" class="sql-result-loading" role="status" hidden>
+        <span class="report-spinner" aria-hidden="true"></span>
+        <strong>Ergebnisse werden geladen</strong>
+        <span>Der Bericht wird ausgeführt und die Fehler werden ausgewertet.</span>
+      </div>
+      <div id="sqlResultContent" class="sql-result-dialog-content" hidden>
+        <section aria-labelledby="sqlErrorsTitle">
+          <h3 id="sqlErrorsTitle">Fehler nach Häufigkeit</h3>
+          <div id="sqlResultErrors"></div>
+        </section>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="configStatisticsDialog" class="config-dialog statistics-dialog" aria-labelledby="configStatisticsTitle">
@@ -600,6 +634,6 @@
     <button id="toastCopyBtn" class="toast-action" type="button" title="Meldung in die Zwischenablage kopieren">Kopieren</button>
     <button id="toastCloseBtn" class="toast-action" type="button" aria-label="Meldung schließen" title="Schließen">×</button>
   </div>
-  <script src="/assets/app.js?v=20260810-version-export" defer></script>
+  <script src="/assets/app.js?v=20261128-result-preview-6" defer></script>
 </body>
 </html>

@@ -50,6 +50,7 @@ from backend.services.nemo_client import (
     get_columns,
     get_reports,
     load_project_field_values,
+    load_temporary_sql_dataframe,
     update_reports_sql,
 )
 from backend.logging_config import configure_logging
@@ -57,6 +58,7 @@ from backend.services.report_service import (
     find_report_by_reference,
     run_report_preview,
     summarize_report,
+    sql_result_preview,
 )
 from backend.services.report_export import (
     ReportExportError,
@@ -81,7 +83,7 @@ from backend.services.rule_catalog_store import (
     RuleCatalogStore,
     RuleTemplateNotFoundError,
 )
-from backend.services.sql_generator import SqlGenerationError, has_pa_export_restriction, render_sql_from_model, render_top_25_sql
+from backend.services.sql_generator import SqlGenerationError, SqlRenderResult, has_pa_export_restriction, render_sql_from_model, render_top_25_sql
 from backend.services.sql_model import get_rule_catalog, merge_missing_group_metadata, normalize_editor_model, parse_editor_model
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -170,140 +172,25 @@ async def log_http_exception(request: Request, exc: HTTPException) -> JSONRespon
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=headers)
 
 
-class ConfigWriteRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str = Field(min_length=1, max_length=120)
-    ini_content: str = Field(alias="iniContent", min_length=1)
-    source_file: Optional[str] = Field(default="", alias="sourceFile")
-
-
-class ConfigUpdateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
-    ini_content: Optional[str] = Field(default=None, alias="iniContent", min_length=1)
-    source_file: Optional[str] = Field(default=None, alias="sourceFile")
-
-
-class ConfigCredentialsRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
-    tenant: str = Field(min_length=1, max_length=120, pattern=r"^[^\r\n]+$")
-    userid: str = Field(min_length=1, max_length=240, pattern=r"^[^\r\n]+$")
-    password: str = Field(min_length=1, max_length=1024, pattern=r"^[^\r\n]+$")
-    nemo_url: str = Field(
-        default=DEFAULT_NEMO_URL,
-        alias="nemoUrl",
-        min_length=1,
-        max_length=500,
-        pattern=r"^https?://[^\s]+$",
-    )
-    environment: str = Field(
-        default=DEFAULT_NEMO_ENVIRONMENT,
-        min_length=1,
-        max_length=120,
-        pattern=r"^[A-Za-z0-9._-]+$",
-    )
+from backend.routers.configs import (
+    ConfigConnectionUpdateRequest,
+    ConfigCredentialsRequest,
+    ConfigUpdateRequest,
+    ConfigWriteRequest,
+    create_config,
+    create_config_from_credentials,
+    delete_config,
+    get_config_connection,
+    health,
+    import_local_configs,
+    list_configs,
+    router as configs_router,
+    update_config,
+    update_config_connection,
+)
 
 
-class ConfigConnectionUpdateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str = Field(min_length=1, max_length=120)
-    tenant: str = Field(min_length=1, max_length=120, pattern=r"^[^\r\n]+$")
-    userid: str = Field(min_length=1, max_length=240, pattern=r"^[^\r\n]+$")
-    password: str = Field(default="", max_length=1024, pattern=r"^[^\r\n]*$")
-    nemo_url: str = Field(
-        alias="nemoUrl",
-        min_length=1,
-        max_length=500,
-        pattern=r"^https?://[^\s]+$",
-    )
-    environment: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9._-]+$")
-
-
-class AIConfigCreateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str = Field(default="Groq", min_length=1, max_length=120)
-    provider: str = Field(
-        default="groq",
-        pattern=r"^(groq|openai|perplexity|gemini|ollama|lmstudio|openai_compatible|litellm)$",
-    )
-    base_url: str = Field(default="https://api.groq.com/openai/v1", alias="baseUrl", min_length=1, max_length=500)
-    model: str = Field(default="openai/gpt-oss-120b", min_length=1, max_length=200)
-    api_key: str = Field(default="", alias="apiKey", max_length=2048)
-
-
-class AIRuleDraftRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    ai_config_id: Optional[str] = Field(default=None, alias="aiConfigId")
-    internal_name: str = Field(alias="internalName", min_length=1, max_length=240)
-    display_name: str = Field(default="", alias="displayName", max_length=500)
-    description: str = Field(default="", max_length=2000)
-    data_type: str = Field(default="", alias="dataType", max_length=120)
-    requirement: str = Field(min_length=3, max_length=4000)
-    existing_rules: list[dict] = Field(default_factory=list, alias="existingRules", max_length=100)
-    language: str = Field(default="de", pattern=r"^(de|en)$")
-
-
-class AIRuleExampleTestRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    ai_config_id: Optional[str] = Field(default=None, alias="aiConfigId")
-    internal_name: str = Field(alias="internalName", min_length=1, max_length=240)
-    condition: str = Field(min_length=1, max_length=100_000)
-    message: str = Field(default="", max_length=1000)
-    examples: list[dict] = Field(min_length=1, max_length=20)
-    language: str = Field(default="de", pattern=r"^(de|en)$")
-
-
-class AIRuleExplanationRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    ai_config_id: Optional[str] = Field(default=None, alias="aiConfigId")
-    internal_name: str = Field(alias="internalName", min_length=1, max_length=240)
-    display_name: str = Field(default="", alias="displayName", max_length=500)
-    description: str = Field(default="", max_length=2000)
-    data_type: str = Field(default="", alias="dataType", max_length=120)
-    condition: str = Field(min_length=1, max_length=100_000)
-    message: str = Field(default="", max_length=1000)
-    dimension: str = Field(default="", max_length=120)
-    rule_type: str = Field(default="", alias="ruleType", max_length=120)
-    language: str = Field(default="de", pattern=r"^(de|en)$")
-
-
-class AIRuleRevisionRequest(AIRuleExplanationRequest):
-    instruction: str = Field(default="", max_length=4000)
-
-
-class AIFieldRuleSuggestionRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    ai_config_id: Optional[str] = Field(default=None, alias="aiConfigId")
-    project: str = Field(default=DEFAULT_PROJECT, min_length=1, max_length=120)
-    internal_name: str = Field(alias="internalName", min_length=1, max_length=240)
-    display_name: str = Field(default="", alias="displayName", max_length=500)
-    description: str = Field(default="", max_length=2000)
-    data_type: str = Field(default="", alias="dataType", max_length=120)
-    max_rows: int = Field(default=500, alias="maxRows", ge=50, le=1000)
-    language: str = Field(default="de", pattern=r"^(de|en)$")
-
-
-class AIMessageTranslationRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    ai_config_id: Optional[str] = Field(default=None, alias="aiConfigId")
-    target_language: str = Field(alias="targetLanguage", pattern=r"^(de|en)$")
-    messages: list[dict] = Field(min_length=1, max_length=500)
+# AI request models live in backend/routers/ai.py and are re-exported at the bottom of this file.
 
 
 
@@ -317,7 +204,16 @@ class EditorModelRequest(BaseModel):
 
 
 class NemoReportWriteRequest(EditorModelRequest):
+    sql: Optional[str] = Field(default=None, min_length=1, max_length=1_000_000)
     overwrite_confirmation: str = Field(alias="overwriteConfirmation", min_length=1, max_length=240)
+    base_sql_hash: str = Field(alias="baseSqlHash", pattern=r"^[0-9a-f]{64}$")
+    expected_sql_hash: Optional[str] = Field(default=None, alias="expectedSqlHash", pattern=r"^[0-9a-f]{64}$")
+
+
+class SqlResultPreviewRequest(EditorModelRequest):
+    sql: Optional[str] = Field(default=None, min_length=1, max_length=1_000_000)
+    base_sql_hash: str = Field(alias="baseSqlHash", pattern=r"^[0-9a-f]{64}$")
+    expected_sql_hash: str = Field(alias="expectedSqlHash", pattern=r"^[0-9a-f]{64}$")
 
 class EditorDraftRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -367,83 +263,7 @@ class HarmonizationTransferRequest(BaseModel):
     target_report_ids: list[str] = Field(alias="targetReportIds", min_length=1, max_length=100)
 
 
-class RuleTemplateCreateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    key: str = Field(min_length=1, max_length=120)
-    name: str = Field(min_length=1, max_length=240)
-    description: str = Field(default="", max_length=2000)
-    status: str = Field(default="draft", pattern=r"^(draft|approved|deprecated)$")
-    condition_template: str = Field(alias="conditionTemplate", min_length=1, max_length=100_000)
-    message_de_template: str = Field(default="", alias="messageDeTemplate", max_length=2000)
-    message_en_template: str = Field(default="", alias="messageEnTemplate", max_length=2000)
-    dimension: str = Field(min_length=1, max_length=120)
-    rule_type: str = Field(alias="ruleType", min_length=1, max_length=120)
-    parameter_schema: dict = Field(default_factory=dict, alias="parameterSchema")
-    compatible_data_types: list[str] = Field(default_factory=list, alias="compatibleDataTypes", max_length=100)
-    field_categories: list[str] = Field(default_factory=list, alias="fieldCategories", max_length=100)
-    examples: list[dict] = Field(default_factory=list, max_length=100)
-    change_note: str = Field(default="Initiale Version", alias="changeNote", max_length=1000)
-
-
-class RuleTemplateVersionRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    condition_template: str = Field(alias="conditionTemplate", min_length=1, max_length=100_000)
-    message_de_template: str = Field(default="", alias="messageDeTemplate", max_length=2000)
-    message_en_template: str = Field(default="", alias="messageEnTemplate", max_length=2000)
-    dimension: str = Field(min_length=1, max_length=120)
-    rule_type: str = Field(alias="ruleType", min_length=1, max_length=120)
-    parameter_schema: dict = Field(default_factory=dict, alias="parameterSchema")
-    compatible_data_types: list[str] = Field(default_factory=list, alias="compatibleDataTypes", max_length=100)
-    field_categories: list[str] = Field(default_factory=list, alias="fieldCategories", max_length=100)
-    examples: list[dict] = Field(default_factory=list, max_length=100)
-    change_note: str = Field(default="", alias="changeNote", max_length=1000)
-
-
-class RuleTemplateMetadataRequest(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=240)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    status: Optional[str] = Field(default=None, pattern=r"^(draft|approved|deprecated)$")
-
-
-class RuleTemplateResolveRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    version: Optional[int] = Field(default=None, ge=1)
-    field: str = Field(min_length=1, max_length=240)
-    display_name: str = Field(default="", alias="displayName", max_length=500)
-    description: str = Field(default="", max_length=2000)
-    parameters: dict = Field(default_factory=dict)
-
-
-class RuleTemplateBindingRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    template_id: str = Field(alias="templateId", min_length=1, max_length=240)
-    template_version: int = Field(alias="templateVersion", ge=1)
-    config_id: str = Field(alias="configId", min_length=1, max_length=240)
-    project: str = Field(min_length=1, max_length=240)
-    report_ref: str = Field(alias="reportRef", min_length=1, max_length=500)
-    group_ref: str = Field(alias="groupRef", min_length=1, max_length=500)
-    rule_ref: str = Field(alias="ruleRef", min_length=1, max_length=500)
-    parameters: dict = Field(default_factory=dict)
-
-
-class RuleCatalogAnalysisRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    config_id: Optional[str] = Field(default=None, alias="configId")
-    project: str = Field(default=DEFAULT_PROJECT, pattern=r"^Master Data$")
-
-
-class RuleCatalogImportRequest(RuleCatalogAnalysisRequest):
-    candidate_keys: list[str] = Field(alias="candidateKeys", min_length=1, max_length=5000)
-
-
-class RuleCatalogCandidateDecisionRequest(RuleCatalogAnalysisRequest):
-    candidate_key: str = Field(alias="candidateKey", min_length=1, max_length=240)
-    decision: str = Field(pattern=r"^(rejected|pending)$")
+# Rule-template / rule-catalog request models live in backend/routers/rule_templates.py and are re-exported below.
 
 
 class ReportRunRequest(BaseModel):
@@ -687,611 +507,8 @@ def run_cli_wizard_export(request: ReportExportRequest) -> dict:
     return {"configId": profile.id, "tenant": profile.tenant, "project": request.project, **result}
 
 
-@app.get("/api/health")
-def health() -> dict:
-    return {"status": "ok", "version": __version__}
+# AI routes live in backend/routers/ai.py and are registered via app.include_router(ai_router).
 
-
-@app.get("/api/configs")
-def list_configs() -> dict:
-    profiles = _store().list_profiles()
-    return {
-        "configs": [profile.to_dict() for profile in profiles],
-        "defaultConfigId": _store().default_profile(profiles).id if profiles else None,
-    }
-
-
-@app.post("/api/configs", status_code=201)
-def create_config(request: ConfigWriteRequest) -> dict:
-    profile = _store().create_config(
-        name=request.name,
-        ini_content=request.ini_content,
-        source_file=request.source_file or "",
-    )
-    return {"config": profile.to_dict()}
-
-
-@app.post("/api/configs/from-credentials", status_code=201)
-def create_config_from_credentials(request: ConfigCredentialsRequest) -> dict:
-    try:
-        name = request.name.strip() if request.name else config_profile_name(request.tenant)
-        ini_content = build_nemo_config_content(
-            request.tenant,
-            request.userid,
-            request.password,
-            nemo_url=request.nemo_url,
-            environment=request.environment,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    store = _store()
-    if any(profile.name.casefold() == name.casefold() for profile in store.list_profiles()):
-        raise HTTPException(status_code=409, detail=f"Die Konfiguration '{name}' ist bereits vorhanden.")
-    profile = store.create_config(name=name, ini_content=ini_content)
-    log.info("Config-Profil über Oberfläche angelegt: id=%s name=%s tenant=%s", profile.id, profile.name, profile.tenant)
-    return {"config": profile.to_dict()}
-
-
-@app.get("/api/configs/{config_id}/connection")
-def get_config_connection(config_id: str) -> dict:
-    try:
-        store = _store()
-        profile = store.get_profile(config_id)
-        settings = read_nemo_config_settings(store.decrypt_config(config_id))
-    except ConfigNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"config": {"id": profile.id, "name": profile.name, **settings}}
-
-
-@app.put("/api/configs/{config_id}/connection")
-def update_config_connection(config_id: str, request: ConfigConnectionUpdateRequest) -> dict:
-    store = _store()
-    try:
-        profile = store.get_profile(config_id)
-        duplicate = next(
-            (
-                item
-                for item in store.list_profiles()
-                if item.id != config_id and item.name.casefold() == request.name.strip().casefold()
-            ),
-            None,
-        )
-        if duplicate:
-            raise HTTPException(status_code=409, detail=f"Die Konfiguration '{request.name.strip()}' ist bereits vorhanden.")
-        ini_content = update_nemo_config_content(
-            store.decrypt_config(config_id),
-            tenant=request.tenant,
-            userid=request.userid,
-            password=request.password,
-            nemo_url=request.nemo_url,
-            environment=request.environment,
-        )
-        updated = store.update_config(config_id, name=request.name, ini_content=ini_content)
-    except ConfigNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    log.info(
-        "Config-Profil über Oberfläche geändert: id=%s name=%s tenant=%s environment=%s",
-        updated.id,
-        updated.name,
-        updated.tenant,
-        request.environment,
-    )
-    return {"config": updated.to_dict(), "passwordChanged": bool(request.password), "previousName": profile.name}
-
-
-@app.put("/api/configs/{config_id}")
-def update_config(config_id: str, request: ConfigUpdateRequest) -> dict:
-    try:
-        profile = _store().update_config(
-            config_id=config_id,
-            name=request.name,
-            ini_content=request.ini_content,
-            source_file=request.source_file,
-        )
-    except ConfigNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    return {"config": profile.to_dict()}
-
-
-@app.delete("/api/configs/{config_id}", status_code=204)
-def delete_config(config_id: str) -> None:
-    try:
-        _store().delete_config(config_id)
-    except ConfigNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-
-
-@app.post("/api/configs/import-local")
-def import_local_configs(overwrite: bool = Query(default=False)) -> dict:
-    profiles = _store().import_ini_files(overwrite=overwrite)
-    return {
-        "count": len(profiles),
-        "configs": [profile.to_dict() for profile in profiles],
-    }
-
-
-@app.get("/api/ai/configs")
-def list_ai_configs() -> dict:
-    profiles = _ai_store().list_profiles()
-    return {
-        "configs": [profile.to_dict() for profile in profiles],
-        "defaultAiConfigId": profiles[0].id if profiles else None,
-    }
-
-
-@app.post("/api/ai/configs", status_code=201)
-def create_ai_config(request: AIConfigCreateRequest) -> dict:
-    try:
-        connector = create_ai_connector(
-            AIConnectionSettings(
-                provider=request.provider,
-                base_url=request.base_url,
-                model=request.model,
-                api_key=request.api_key,
-            )
-        )
-        connector.test_connection()
-        profile = _ai_store().create_profile(
-            name=request.name,
-            provider=request.provider,
-            base_url=request.base_url,
-            model=request.model,
-            api_key=request.api_key,
-        )
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except AIConfigStoreError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    log.info("KI-Konfiguration angelegt: id=%s provider=%s model=%s", profile.id, profile.provider, profile.model)
-    return {"config": profile.to_dict()}
-
-
-@app.post("/api/ai/configs/{ai_config_id}/test")
-def test_ai_config(ai_config_id: str) -> dict:
-    try:
-        connector = create_ai_connector(_ai_store().resolve_settings(ai_config_id))
-        return connector.test_connection()
-    except AIConfigNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except AIConfigStoreError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-
-@app.post("/api/ai/rules/draft")
-def create_ai_rule_draft(request: AIRuleDraftRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    try:
-        draft = connector.create_rule_draft(request.model_dump(by_alias=True))
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"configId": nemo_profile.id, "draft": draft}
-
-
-@app.post("/api/ai/rules/test-examples")
-def test_ai_rule_examples(request: AIRuleExampleTestRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    try:
-        result = connector.test_rule_examples(request.model_dump(by_alias=True))
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"configId": nemo_profile.id, "test": result, "testType": "semantic-ai-review"}
-
-
-@app.post("/api/ai/rules/explain")
-def explain_ai_rule(request: AIRuleExplanationRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    try:
-        explanation = connector.explain_rule(request.model_dump(by_alias=True))
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"configId": nemo_profile.id, "explanation": explanation}
-
-
-@app.post("/api/ai/rules/revise")
-def revise_ai_rule(request: AIRuleRevisionRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    try:
-        revision = connector.revise_rule(request.model_dump(by_alias=True))
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"configId": nemo_profile.id, "revision": revision}
-
-
-@app.post("/api/ai/messages/translate")
-def translate_ai_messages(request: AIMessageTranslationRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    ai_profile_id = request.ai_config_id
-    if not ai_profile_id:
-        profiles = _ai_store().list_profiles()
-        ai_profile_id = next((profile.id for profile in profiles if profile.active), profiles[0].id if profiles else "default")
-    ai_signature = "|".join((ai_profile_id, connector.settings.provider, connector.settings.model, "v1"))
-    cache = _translation_cache_store()
-    target_language = request.target_language
-    ordered_messages = []
-    missing_messages = []
-    translations_by_id = {}
-    for item in request.messages:
-        message_id = str(item.get("id") or "").strip()
-        source_text = str(item.get("text") or "").strip()
-        source_language = "en" if str(item.get("sourceLanguage") or "de").casefold() == "en" else "de"
-        if not message_id or not source_text:
-            raise HTTPException(status_code=422, detail="Für die Übersetzung fehlen ID oder Fehlermeldung.")
-        row = {
-            "id": message_id,
-            "text": source_text,
-            "sourceLanguage": source_language,
-        }
-        ordered_messages.append(row)
-        cached = cache.get(ai_signature, source_language, target_language, source_text)
-        if cached is None:
-            missing_messages.append(row)
-        else:
-            translations_by_id[message_id] = cached
-    try:
-        if missing_messages:
-            result = connector.translate_messages(
-                {
-                    "targetLanguage": target_language,
-                    "messages": [{"id": item["id"], "text": item["text"]} for item in missing_messages],
-                }
-            )
-            translated = {str(item["id"]): str(item["text"]) for item in result.get("translations") or []}
-            for item in missing_messages:
-                translated_text = translated[item["id"]]
-                translations_by_id[item["id"]] = translated_text
-                cache.put(
-                    ai_signature,
-                    item["sourceLanguage"],
-                    target_language,
-                    item["text"],
-                    translated_text,
-                )
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    cache_hits = len(ordered_messages) - len(missing_messages)
-    log.info(
-        "KI-Übersetzung: ai=%s target=%s messages=%s cache_hits=%s cache_misses=%s",
-        ai_profile_id,
-        target_language,
-        len(ordered_messages),
-        cache_hits,
-        len(missing_messages),
-    )
-    return {
-        "configId": nemo_profile.id,
-        "targetLanguage": target_language,
-        "translations": [
-            {"id": item["id"], "text": translations_by_id[item["id"]]}
-            for item in ordered_messages
-        ],
-        "cache": {"hits": cache_hits, "misses": len(missing_messages)},
-    }
-
-
-@app.post("/api/ai/fields/suggest-rules")
-def suggest_ai_rules_for_field(request: AIFieldRuleSuggestionRequest) -> dict:
-    nemo_profile, connector = _resolve_ai_connector(request.config_id, request.ai_config_id)
-    try:
-        with _nemo_for_config(nemo_profile.id) as (_profile, nemo):
-            columns = get_columns(nemo=nemo, project=request.project, filter_value="*")
-            column = next(
-                (
-                    item for item in columns
-                    if str(item.get("internalName") or "").casefold() == request.internal_name.casefold()
-                ),
-                None,
-            )
-            if not column:
-                raise HTTPException(status_code=404, detail="Das ausgewählte Feld wurde im NEMO-Projekt nicht gefunden.")
-            values = load_project_field_values(
-                nemo=nemo,
-                project=request.project,
-                source_column_name=str(column.get("internalName") or request.internal_name),
-                max_rows=request.max_rows,
-            )
-        profile = build_anonymized_field_profile(values)
-        analysis = connector.suggest_rules_from_profile(
-            {
-                "internalName": column.get("internalName") or request.internal_name,
-                "displayName": column.get("displayName") or request.display_name,
-                "description": column.get("description") or request.description,
-                "dataType": column.get("dataType") or request.data_type,
-                "profile": profile,
-                "language": request.language,
-            }
-        )
-    except HTTPException:
-        raise
-    except AIConnectorError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except Exception as exc:
-        log.exception(
-            "Feldprofil oder KI-Regelvorschläge fehlgeschlagen: config=%s project=%s field=%s",
-            nemo_profile.id,
-            request.project,
-            request.internal_name,
-        )
-        raise HTTPException(status_code=502, detail=f"Das Feld konnte nicht sicher analysiert werden: {exc}") from exc
-
-    log.info(
-        "Anonymisiertes Feldprofil analysiert: config=%s project=%s field=%s rows=%s suggestions=%s",
-        nemo_profile.id,
-        request.project,
-        request.internal_name,
-        profile["sampleSize"],
-        len(analysis.get("suggestions") or []),
-    )
-    return {
-        "configId": nemo_profile.id,
-        "project": request.project,
-        "field": column,
-        "profile": profile,
-        "analysis": analysis,
-    }
-
-
-
-@app.get("/api/rule-catalog")
-def rule_catalog() -> dict:
-    return get_rule_catalog()
-
-
-@app.get("/api/rule-templates")
-def list_rule_templates(
-    status: Optional[str] = Query(default=None, pattern=r"^(draft|approved|deprecated)$"),
-) -> dict:
-    templates = _rule_template_store().list_templates(status=status)
-    return {"count": len(templates), "templates": [template.to_dict() for template in templates]}
-
-
-@app.post("/api/rule-templates/analyze-existing")
-def analyze_existing_rule_templates(request: RuleCatalogAnalysisRequest) -> dict:
-    profile, report_models, _columns, skipped_reports = _load_harmonization_context(
-        request.config_id,
-        request.project,
-    )
-    store = _rule_template_store()
-    analysis = analyze_rule_catalog_candidates(
-        report_models,
-        store.list_templates(),
-    )
-    decisions = store.list_candidate_decisions(config_id=profile.id, project=request.project)
-    for candidate in analysis["candidates"]:
-        candidate["decision"] = decisions.get(candidate["key"], "pending")
-    return {
-        "configId": profile.id,
-        "project": request.project,
-        **analysis,
-        "skippedReports": skipped_reports,
-    }
-
-
-@app.post("/api/rule-templates/import-existing")
-def import_existing_rule_templates(request: RuleCatalogImportRequest) -> dict:
-    profile, report_models, _columns, skipped_reports = _load_harmonization_context(
-        request.config_id,
-        request.project,
-    )
-    store = _rule_template_store()
-    analysis = analyze_rule_catalog_candidates(report_models, store.list_templates())
-    by_key = {candidate["key"]: candidate for candidate in analysis["candidates"]}
-    selected = []
-    for key in dict.fromkeys(request.candidate_keys):
-        candidate = by_key.get(key)
-        if not candidate:
-            raise HTTPException(status_code=422, detail=f"Analysekandidat nicht gefunden: {key}")
-        selected.append(candidate)
-
-    imported = []
-    binding_count = 0
-    for candidate in selected:
-        try:
-            if candidate["existingTemplateId"]:
-                template = store.get_template(candidate["existingTemplateId"])
-                created = False
-            else:
-                template = store.create_template(
-                    key=candidate["key"],
-                    name=candidate["name"],
-                    description=candidate["description"],
-                    status="draft",
-                    condition_template=candidate["conditionTemplate"],
-                    message_de_template=candidate["messageDeTemplate"],
-                    message_en_template=candidate["messageEnTemplate"],
-                    dimension=candidate["dimension"],
-                    rule_type=candidate["ruleType"],
-                    parameter_schema=candidate["parameterSchema"],
-                    compatible_data_types=candidate["compatibleDataTypes"],
-                    field_categories=candidate["fieldCategories"],
-                    change_note="Automatisch aus bestehenden Master-Data-Regeln analysiert",
-                )
-                created = True
-            for location in candidate["locations"]:
-                store.bind_rule(
-                    template_ref=template.id,
-                    template_version=template.currentVersion,
-                    config_id=profile.id,
-                    project=request.project,
-                    report_ref=location["reportRef"],
-                    group_ref=location["groupRef"],
-                    rule_ref=location["ruleRef"],
-                    parameters=location.get("parameters") or {},
-                )
-                binding_count += 1
-        except (RuleCatalogError, RuleTemplateValidationError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        imported.append(
-            {
-                "candidateKey": candidate["key"],
-                "template": template.to_dict(),
-                "created": created,
-                "bindingCount": len(candidate["locations"]),
-            }
-        )
-        store.set_candidate_decision(
-            config_id=profile.id,
-            project=request.project,
-            candidate_key=candidate["key"],
-            decision="imported",
-        )
-    return {
-        "configId": profile.id,
-        "project": request.project,
-        "importedCount": len(imported),
-        "createdCount": sum(1 for item in imported if item["created"]),
-        "bindingCount": binding_count,
-        "imported": imported,
-        "skippedReports": skipped_reports,
-    }
-
-
-@app.post("/api/rule-templates/candidate-decisions")
-def set_rule_template_candidate_decision(request: RuleCatalogCandidateDecisionRequest) -> dict:
-    profile, report_models, _columns, _skipped_reports = _load_harmonization_context(
-        request.config_id,
-        request.project,
-    )
-    store = _rule_template_store()
-    analysis = analyze_rule_catalog_candidates(report_models, store.list_templates())
-    candidate = next(
-        (item for item in analysis["candidates"] if item["key"] == request.candidate_key),
-        None,
-    )
-    if not candidate:
-        raise HTTPException(status_code=422, detail=f"Analysekandidat nicht gefunden: {request.candidate_key}")
-    stored_decision = None if request.decision == "pending" else request.decision
-    store.set_candidate_decision(
-        config_id=profile.id,
-        project=request.project,
-        candidate_key=request.candidate_key,
-        decision=stored_decision,
-    )
-    return {
-        "configId": profile.id,
-        "project": request.project,
-        "candidateKey": request.candidate_key,
-        "decision": request.decision,
-    }
-
-
-@app.get("/api/rule-templates/{template_ref}")
-def get_rule_template(
-    template_ref: str,
-    version: Optional[int] = Query(default=None, ge=1),
-) -> dict:
-    try:
-        template = _rule_template_store().get_template(template_ref, version=version)
-    except RuleTemplateNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    return {"template": template.to_dict()}
-
-
-@app.post("/api/rule-templates", status_code=201)
-def create_rule_template(request: RuleTemplateCreateRequest) -> dict:
-    try:
-        template = _rule_template_store().create_template(
-            key=request.key,
-            name=request.name,
-            description=request.description,
-            status=request.status,
-            condition_template=request.condition_template,
-            message_de_template=request.message_de_template,
-            message_en_template=request.message_en_template,
-            dimension=request.dimension,
-            rule_type=request.rule_type,
-            parameter_schema=request.parameter_schema,
-            compatible_data_types=request.compatible_data_types,
-            field_categories=request.field_categories,
-            examples=request.examples,
-            change_note=request.change_note,
-        )
-    except (RuleCatalogError, RuleTemplateValidationError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"template": template.to_dict()}
-
-
-@app.post("/api/rule-templates/{template_ref}/versions", status_code=201)
-def create_rule_template_version(template_ref: str, request: RuleTemplateVersionRequest) -> dict:
-    try:
-        template = _rule_template_store().add_version(
-            template_ref,
-            condition_template=request.condition_template,
-            message_de_template=request.message_de_template,
-            message_en_template=request.message_en_template,
-            dimension=request.dimension,
-            rule_type=request.rule_type,
-            parameter_schema=request.parameter_schema,
-            compatible_data_types=request.compatible_data_types,
-            field_categories=request.field_categories,
-            examples=request.examples,
-            change_note=request.change_note,
-        )
-    except RuleTemplateNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except (RuleCatalogError, RuleTemplateValidationError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"template": template.to_dict()}
-
-
-@app.patch("/api/rule-templates/{template_ref}")
-def update_rule_template_metadata(template_ref: str, request: RuleTemplateMetadataRequest) -> dict:
-    try:
-        template = _rule_template_store().update_metadata(
-            template_ref,
-            name=request.name,
-            description=request.description,
-            status=request.status,
-        )
-    except RuleTemplateNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except RuleCatalogError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"template": template.to_dict()}
-
-
-@app.post("/api/rule-templates/{template_ref}/resolve")
-def resolve_catalog_rule(template_ref: str, request: RuleTemplateResolveRequest) -> dict:
-    try:
-        template = _rule_template_store().get_template(template_ref, version=request.version)
-        resolved = resolve_rule_template(
-            template.version,
-            field=request.field,
-            display_name=request.display_name,
-            description=request.description,
-            parameters=request.parameters,
-        )
-    except RuleTemplateNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except (RuleTemplateValidationError, RuleTemplateResolutionError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"template": template.to_dict(), "resolvedRule": resolved.to_dict()}
-
-
-@app.post("/api/rule-template-bindings", status_code=201)
-def bind_catalog_rule(request: RuleTemplateBindingRequest) -> dict:
-    try:
-        binding = _rule_template_store().bind_rule(
-            template_ref=request.template_id,
-            template_version=request.template_version,
-            config_id=request.config_id,
-            project=request.project,
-            report_ref=request.report_ref,
-            group_ref=request.group_ref,
-            rule_ref=request.rule_ref,
-            parameters=request.parameters,
-        )
-    except RuleTemplateNotFoundError as exc:
-        raise _http_not_found(exc) from exc
-    except RuleCatalogError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return {"binding": binding.to_dict()}
 
 
 @app.post("/api/editor-model/validate")
@@ -1951,11 +1168,19 @@ def _render_sql_payload(report_ref: str, request: EditorModelRequest) -> dict:
         raise _http_not_found(exc) from exc
 
     original_sql = report.get("querySyntax") or ""
+    if isinstance(request, (NemoReportWriteRequest, SqlResultPreviewRequest)):
+        _ensure_report_sql_unchanged(original_sql, request.base_sql_hash)
     model = normalize_editor_model(request.editor_model)
     _ensure_editor_model_matches_report(model, report)
     pa_export_filter = _effective_pa_export_filter(profile.id, original_sql, request.pa_export_filter)
     try:
-        rendered = render_sql_from_model(original_sql, model, pa_export_filter=pa_export_filter)
+        supplied_sql = getattr(request, "sql", None)
+        if supplied_sql is not None:
+            if not supplied_sql.strip():
+                raise SqlGenerationError("Die SQL-Vorschau ist leer.")
+            rendered = SqlRenderResult(supplied_sql, "", "", supplied_sql != original_sql)
+        else:
+            rendered = render_sql_from_model(original_sql, model, pa_export_filter=pa_export_filter)
     except SqlGenerationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1966,6 +1191,8 @@ def _render_sql_payload(report_ref: str, request: EditorModelRequest) -> dict:
         "report": summarize_report(report),
         "editorModel": model,
         "sql": rendered.sql,
+        "sqlHash": _sql_fingerprint(rendered.sql),
+        "sourceSqlHash": _sql_fingerprint(original_sql),
         "generatedChecksSql": rendered.generated_checks_sql,
         "originalChecksSql": rendered.original_checks_sql,
         "changed": rendered.changed,
@@ -2020,6 +1247,32 @@ def render_report_sql(report_ref: str, request: EditorModelRequest) -> dict:
     return _render_sql_payload(report_ref, request)
 
 
+def _ensure_report_sql_unchanged(sql: str, expected_hash: str) -> None:
+    if _sql_fingerprint(sql) != expected_hash:
+        raise HTTPException(
+            status_code=409,
+            detail="Der Bericht wurde inzwischen in NEMO geändert. Bitte den aktuellen Bericht neu laden und die Änderungen abgleichen. Es wurde nichts geschrieben.",
+        )
+
+
+@app.post("/api/reports/{report_ref}/preview-result")
+def preview_generated_report_result(report_ref: str, request: SqlResultPreviewRequest) -> dict:
+    payload = _render_sql_payload(report_ref, request)
+    if _sql_fingerprint(payload["sql"]) != request.expected_sql_hash:
+        raise HTTPException(status_code=409, detail="Die SQL-Vorschau ist veraltet. Bitte erneut erzeugen.")
+    if any(str(item.get("severity") or "").casefold() == "error"
+           for item in payload["validation"].get("findings", [])):
+        raise HTTPException(status_code=422, detail="SQL mit Validierungsfehlern kann nicht ausgeführt werden.")
+    try:
+        with _nemo_for_config(request.config_id) as (profile, nemo):
+            df = load_temporary_sql_dataframe(nemo, request.project, payload["sql"], strict=True)
+            preview = sql_result_preview(df)
+    except Exception as exc:
+        log.exception("SQL-Ergebnisprüfung fehlgeschlagen")
+        raise HTTPException(status_code=502, detail=f"Ergebnisprüfung fehlgeschlagen: {_nemo_error_summary(exc)}") from exc
+    return {"configId": profile.id, "project": request.project, "sqlHash": request.expected_sql_hash, "preview": preview}
+
+
 @app.post("/api/reports/{report_ref}/write-to-nemo")
 def write_report_to_nemo(report_ref: str, request: NemoReportWriteRequest) -> dict:
     operation_id = request_id_context.get() or uuid.uuid4().hex[:12]
@@ -2031,6 +1284,8 @@ def write_report_to_nemo(report_ref: str, request: NemoReportWriteRequest) -> di
         request.project,
     )
     payload = _render_sql_payload(report_ref, request)
+    if request.expected_sql_hash and _sql_fingerprint(payload["sql"]) != request.expected_sql_hash:
+        raise HTTPException(status_code=409, detail="Die SQL-Vorschau ist veraltet. Bitte erneut erzeugen.")
     errors = [
         finding
         for finding in (payload.get("validation") or {}).get("findings", [])
@@ -2061,6 +1316,7 @@ def write_report_to_nemo(report_ref: str, request: NemoReportWriteRequest) -> di
             raise HTTPException(status_code=409, detail="Der NEMO-Bericht ist über den Internalname nicht eindeutig vorhanden.")
 
         current_report = exact_matches[0]
+        _ensure_report_sql_unchanged(current_report.get("querySyntax") or "", request.base_sql_hash)
         current_is_top_25 = _has_top_25_suffix(current_report)
         if current_is_top_25:
             top_25_report = current_report
@@ -2134,6 +1390,7 @@ def write_report_to_nemo(report_ref: str, request: NemoReportWriteRequest) -> di
         "report": payload["report"],
         "internalName": internal_name,
         "changed": payload["changed"],
+        "reportSqlHash": _sql_fingerprint(updates[0][1]),
         "top25Created": top_25_created,
         "updatedReports": [summarize_report(report) for report, _sql in updates],
     }
@@ -2291,3 +1548,54 @@ def run_report(report_ref: str, request: ReportRunRequest) -> dict:
         "report": summarize_report(report),
         "preview": preview,
     }
+
+
+app.include_router(configs_router)
+
+from backend.routers.ai import (
+    AIConfigCreateRequest,
+    AIFieldRuleSuggestionRequest,
+    AIMessageTranslationRequest,
+    AIRuleDraftRequest,
+    AIRuleExampleTestRequest,
+    AIRuleExplanationRequest,
+    AIRuleRevisionRequest,
+    create_ai_config,
+    create_ai_rule_draft,
+    explain_ai_rule,
+    list_ai_configs,
+    revise_ai_rule,
+    router as ai_router,
+    suggest_ai_rules_for_field,
+    test_ai_config,
+    test_ai_rule_examples,
+    translate_ai_messages,
+)
+
+app.include_router(ai_router)
+
+
+from backend.routers.rule_templates import (
+    RuleCatalogAnalysisRequest,
+    RuleCatalogCandidateDecisionRequest,
+    RuleCatalogImportRequest,
+    RuleTemplateBindingRequest,
+    RuleTemplateCreateRequest,
+    RuleTemplateMetadataRequest,
+    RuleTemplateResolveRequest,
+    RuleTemplateVersionRequest,
+    analyze_existing_rule_templates,
+    bind_catalog_rule,
+    create_rule_template,
+    create_rule_template_version,
+    get_rule_template,
+    import_existing_rule_templates,
+    list_rule_templates,
+    resolve_catalog_rule,
+    router as rule_templates_router,
+    rule_catalog,
+    set_rule_template_candidate_decision,
+    update_rule_template_metadata,
+)
+
+app.include_router(rule_templates_router)

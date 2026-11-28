@@ -58,7 +58,7 @@ class FrontendTest(unittest.TestCase):
         self.assertEqual(FRONTEND_DIR / "index.html", response.path)
 
     def test_app_registers_frontend_and_api_routes(self) -> None:
-        route_paths = {getattr(route, "path", "") for route in app.routes}
+        route_paths = set(app.openapi()["paths"].keys()) | {getattr(route, "path", "") for route in app.routes}
 
         self.assertIn("/", route_paths)
         self.assertIn("/assets", route_paths)
@@ -91,7 +91,7 @@ class FrontendTest(unittest.TestCase):
     def test_ui_and_report_languages_are_selected_independently(self) -> None:
         app_js = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
         index_html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        route_paths = {getattr(route, "path", "") for route in app.routes}
+        route_paths = set(app.openapi()["paths"].keys())
 
         self.assertIn('id="uiLanguageSelect"', index_html)
         self.assertIn('id="reportLanguageSelect"', index_html)
@@ -393,7 +393,7 @@ class FrontendTest(unittest.TestCase):
         self.assertIn("setConnectionState", app_js)
         self.assertIn("tenant", app_js)
         self.assertIn("brand-text", index_html)
-        self.assertIn("20260810-version-export", index_html)
+        self.assertRegex(index_html, r"/assets/app\.js\?v=[^\"]+")
         self.assertIn(".brand-text", styles_css)
 
     def test_standard_and_expert_modes_are_rendered_by_frontend(self) -> None:
@@ -429,7 +429,7 @@ class FrontendTest(unittest.TestCase):
         self.assertIn("Bericht wurde für die ausgewählte Konfiguration neu geladen", app_js)
         self.assertIn('clearEditor("Konfiguration gewechselt - Bericht wird neu geladen")', app_js)
         self.assertIn("return report.internalName || report.id || report.displayName", app_js)
-        self.assertIn("20260810-version-export", index_html)
+        self.assertRegex(index_html, r"/assets/app\.js\?v=[^\"]+")
 
     def test_config_can_be_created_from_credentials_dialog(self) -> None:
         app_js = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
@@ -454,7 +454,7 @@ class FrontendTest(unittest.TestCase):
         self.assertIn("/connection`", app_js)
         self.assertIn('elements.configPasswordInput.value = ""', app_js)
         self.assertIn(".config-dialog", styles_css)
-        self.assertIn("20260810-version-export", index_html)
+        self.assertRegex(index_html, r"/assets/app\.js\?v=[^\"]+")
 
     def test_configuration_statistics_can_be_created_and_exported(self) -> None:
         app_js = (FRONTEND_DIR / "app.js").read_text(encoding="utf-8")

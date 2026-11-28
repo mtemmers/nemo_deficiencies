@@ -2725,6 +2725,64 @@ th {
   overflow: hidden;
 }
 
+.sql-result-dialog {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  margin: 0;
+  padding: clamp(20px, 3vw, 44px);
+  border-radius: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.sql-result-dialog-layout { display: flex; flex-direction: column; gap: 22px; min-height: 100%; }
+.sql-result-dialog .dialog-head { flex: none; align-items: flex-start; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.sql-result-dialog .dialog-head h2 { margin: 0 0 6px; font-size: 26px; }
+.sql-result-dialog .icon-button { width: 38px; height: 38px; border: 1px solid var(--border); border-radius: 50%; }
+.sql-result-dialog-content { flex: none; padding: 0 12px 12px 0; }
+.sql-result-dialog-content h3 { margin: 0 0 16px; font-size: 18px; }
+.sql-result-loading { flex: 1; min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px; text-align: center; color: var(--muted); }
+.sql-result-loading .report-spinner { width: 52px; height: 52px; border-width: 5px; }
+.sql-result-loading strong { color: var(--text); font-size: 18px; }
+.sql-result-loading[hidden], .sql-result-dialog-content[hidden] { display: none; }
+.sql-result-dialog .statistics-metrics { flex: none; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.sql-result-dialog .sql-result-metric { padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.sql-result-metric strong { font-size: clamp(24px, 3vw, 38px); font-variant-numeric: tabular-nums; }
+.sql-result-metric.passed strong { color: #16804a; }
+.sql-result-metric.failed strong { color: #d12148; }
+.sql-quality-card { flex: none; padding: 20px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.sql-quality-card[hidden] { display: none; }
+.sql-quality-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; align-items: center; }
+.sql-quality-heading h3 { margin: 0; font-size: 16px; }
+.sql-quality-heading > span { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sql-quality-bar { display: flex; height: 26px; background: var(--border); border-radius: 7px; overflow: hidden; }
+.sql-quality-bar > span { display: block; height: 100%; flex: none; }
+.sql-quality-passed { background: #159653; }
+.sql-quality-failed { background: #cf1743; }
+.sql-quality-legend { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: 13px; }
+.sql-quality-legend > span { display: inline-flex; align-items: center; gap: 8px; }
+.sql-quality-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.sql-quality-pass-label i { background: #159653; }
+.sql-quality-fail-label i { background: #cf1743; }
+.sql-error-row { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(80px, 3fr) 130px; gap: 20px; align-items: center; padding: 14px 12px; border-bottom: 1px solid var(--border); }
+.sql-error-row:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.sql-error-label { overflow-wrap: anywhere; line-height: 1.5; }
+.sql-error-track { height: 12px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.sql-error-bar { height: 100%; background: #cf1743; border-radius: 5px; }
+.sql-error-count { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+@media (max-width: 700px) {
+  .sql-result-dialog { padding: 18px; overflow: auto; }
+  .sql-result-dialog-layout { height: auto; min-height: 100%; }
+  .sql-result-dialog .statistics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sql-result-dialog .sql-result-metric { padding: 14px; }
+  .sql-quality-card { padding: 16px; }
+  .sql-error-row { grid-template-columns: minmax(100px, 1fr) 100px; gap: 12px; }
+  .sql-error-track { display: none; }
+}
+
 .sql-preview-panel[hidden] {
   display: none;
 }

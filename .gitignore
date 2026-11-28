@@ -6,6 +6,7 @@ reports/
 *.db
 *.key
 logs/
+.venv/
 __pycache__/
 *.pyc
 build/

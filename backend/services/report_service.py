@@ -1,4 +1,5 @@
 import csv
+from collections import Counter
 import logging
 import math
 from pathlib import Path
@@ -41,7 +42,7 @@ def find_report_by_reference(reports: List[Dict[str, Any]], report_ref: str) -> 
 def _jsonable_value(value: Any) -> Any:
     if value is None:
         return None
-    if isinstance(value, float) and math.isnan(value):
+    if isinstance(value, float) and not math.isfinite(value):
         return None
     if isinstance(value, (str, int, bool)):
         return value
@@ -76,6 +77,31 @@ def run_report_preview(
 ) -> Dict[str, Any]:
     df = load_report_dataframe(nemo, project, report)
     return dataframe_preview(df, max_rows=max_rows)
+
+
+def sql_result_preview(df: Any, max_rows: int = 200) -> Dict[str, Any]:
+    if df is None:
+        raise ValueError("NEMO hat kein auswertbares Ergebnis geliefert.")
+    df = df.astype(object).where(df.notna(), None)
+    result = dataframe_preview(df, max_rows)
+    result["attributeCount"] = len(df.columns)
+    columns = {str(column).strip().upper(): column for column in df.columns}
+    error_column = next((columns[name] for name in ("RULEDESCRIPTION", "DEFICIENCY_DESCRIPTION") if name in columns), None)
+    counts = Counter()
+    records_with_errors = 0
+    if error_column is not None:
+        for description in df[error_column]:
+            messages = {part.strip() for part in str(description or "").split("|") if part.strip()}
+            records_with_errors += bool(messages)
+            counts.update(messages)
+    result["errorColumn"] = str(error_column) if error_column is not None else None
+    result["recordsWithErrors"] = records_with_errors if error_column is not None else None
+    result["errorOccurrences"] = sum(counts.values()) if error_column is not None else None
+    result["errorSummary"] = [
+        {"message": message, "count": count, "percent": round(count / len(df) * 100, 2) if len(df) else 0}
+        for message, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    return result
 
 
 def export_report_data(

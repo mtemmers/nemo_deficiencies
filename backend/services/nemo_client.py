@@ -1,10 +1,12 @@
 import logging
+from io import BytesIO
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
 import requests
+import pandas as pd
 from nemo_library import NemoLibrary
 from nemo_library.features.nemo_persistence_api import getProjectID
 from nemo_library.model.report import Report
@@ -79,32 +81,33 @@ def load_project_field_values(
     max_rows: int = 500,
 ) -> List[Any]:
     safe_rows = max(10, min(int(max_rows), 1000))
-    token = uuid4().hex
-    report_internal_name = f"nemo_deficiencies_field_profile_{token}"
-    report_display_name = f"(SYSTEM) NEMO Deficiencies Field Profile {token[:8]}"
     field_reference = _hana_identifier(source_column_name)
     query = (
         f'SELECT TOP {safe_rows} TO_NVARCHAR({field_reference}) AS "FIELD_VALUE" '
         'FROM $schema.$table'
     )
+    dataframe = load_temporary_sql_dataframe(nemo, project, query)
+    if dataframe is None or dataframe.empty:
+        return []
+    return dataframe.iloc[:, 0].tolist()
+
+
+def load_temporary_sql_dataframe(nemo: NemoLibrary, project: str, sql: str, *, strict: bool = False) -> Any:
+    token = uuid4().hex
+    report_internal_name = f"nemo_deficiencies_preview_{token}"
+    report_display_name = f"(SYSTEM) NEMO Deficiencies Preview {token[:8]}"
     temporary_report = Report(
         displayName=report_display_name,
         internalName=report_internal_name,
-        description="Temporary one-column profile; automatically deleted.",
-        querySyntax=query,
+        description="Temporary SQL preview; automatically deleted.",
+        querySyntax=sql,
         isCustom=True,
     )
     report_id = ""
     report_created = False
     cleanup_error: Exception | None = None
     try:
-        log.info(
-            "Temporärer Feldprofil-Report wird erstellt: project=%s report=%s field=%s rows=%s",
-            project,
-            report_internal_name,
-            source_column_name,
-            safe_rows,
-        )
+        log.info("Temporärer Vorschau-Report wird erstellt: project=%s report=%s", project, report_internal_name)
         nemo.createReports(projectname=project, reports=[temporary_report])
         report_created = True
         reports = get_reports(nemo=nemo, project=project, filter_value="*")
@@ -113,12 +116,11 @@ def load_project_field_values(
             None,
         )
         if not created or not created.get("id"):
-            raise RuntimeError("Der temporäre NEMO-Feldprofil-Report wurde nicht gefunden.")
+            raise RuntimeError("Der temporäre NEMO-Vorschau-Report wurde nicht gefunden.")
         report_id = str(created["id"])
-        dataframe = nemo.LoadReport(projectname=project, report_guid=report_id)
-        if dataframe is None or dataframe.empty:
-            return []
-        return dataframe.iloc[:, 0].tolist()
+        if strict:
+            return _load_preview_report_dataframe(nemo, project, report_id)
+        return nemo.LoadReport(projectname=project, report_guid=report_id)
     finally:
         if report_created and not report_id:
             try:
@@ -136,18 +138,42 @@ def load_project_field_values(
         if report_id:
             try:
                 nemo.deleteReports(reports=[report_id])
-                log.info("Temporärer Feldprofil-Report gelöscht: report=%s", report_internal_name)
+                log.info("Temporärer Vorschau-Report gelöscht: report=%s", report_internal_name)
             except Exception as exc:  # cleanup must be visible to the caller and logs
                 cleanup_error = exc
-                log.exception("Temporärer Feldprofil-Report konnte nicht gelöscht werden: report=%s", report_internal_name)
+                log.exception("Temporärer Vorschau-Report konnte nicht gelöscht werden: report=%s", report_internal_name)
         elif report_created and cleanup_error is None:
             cleanup_error = RuntimeError(
-                f"Der temporäre Feldprofil-Report '{report_internal_name}' wurde zur Bereinigung nicht gefunden."
+                f"Der temporäre Vorschau-Report '{report_internal_name}' wurde zur Bereinigung nicht gefunden."
             )
         if cleanup_error:
             raise RuntimeError(
-                f"Der temporäre Feldprofil-Report '{report_internal_name}' konnte nicht gelöscht werden."
+                f"Der temporäre Vorschau-Report '{report_internal_name}' konnte nicht gelöscht werden."
             ) from cleanup_error
+
+
+def _load_preview_report_dataframe(nemo: NemoLibrary, project: str, report_id: str) -> Any:
+    config = nemo.config
+    response = requests.post(
+        f"{config.get_config_nemo_url()}/api/nemo-report/report_export",
+        headers=config.connection_get_headers(),
+        json={"id": report_id, "project_id": getProjectID(config, project)},
+        timeout=(10, 180),
+    )
+    if response.status_code != 200:
+        raise ValueError(f"NEMO-Ausführung fehlgeschlagen (HTTP {response.status_code}): {response.text[:800]}")
+    try:
+        url = response.json()
+    except ValueError:
+        url = response.text.strip().strip('"')
+    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+        raise ValueError("NEMO hat keinen gültigen Ergebnis-Download geliefert.")
+    download = requests.get(url, timeout=(10, 120))
+    download.raise_for_status()
+    # The library suppresses CSV/download errors and returns an empty DataFrame.
+    # Propagate those failures here so an unavailable result never looks like zero rows.
+    result = pd.read_csv(BytesIO(download.content), dtype=str, keep_default_na=False, escapechar="\\")
+    return result.drop(columns=["_RECORD_COUNT"], errors="ignore")
 
 
 def _hana_identifier(value: str) -> str:

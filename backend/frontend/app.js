@@ -74,6 +74,10 @@ const state = {
   revisingAiRule: false,
   profilingAiField: false,
   renderedSql: null,
+  renderedSqlContext: null,
+  sqlResult: null,
+  sqlResultToken: 0,
+  checkingSqlResult: false,
   changeLog: [],
   baseline: null,
   reportSqlHash: "",
@@ -261,6 +265,22 @@ const elements = {
   validationList: document.querySelector("#validationList"),
   sqlPreviewInfo: document.querySelector("#sqlPreviewInfo"),
   sqlPreview: document.querySelector("#sqlPreview"),
+  runSqlPreviewBtn: document.querySelector("#runSqlPreviewBtn"),
+  sqlResultMetrics: document.querySelector("#sqlResultMetrics"),
+  sqlResultInfo: document.querySelector("#sqlResultInfo"),
+  sqlResultDialog: document.querySelector("#sqlResultDialog"),
+  closeSqlResultBtn: document.querySelector("#closeSqlResultBtn"),
+  sqlResultReportName: document.querySelector("#sqlResultReportName"),
+  sqlResultErrors: document.querySelector("#sqlResultErrors"),
+  sqlResultLoading: document.querySelector("#sqlResultLoading"),
+  sqlResultContent: document.querySelector("#sqlResultContent"),
+  sqlResultQuality: document.querySelector("#sqlResultQuality"),
+  sqlResultQualityRate: document.querySelector("#sqlResultQualityRate"),
+  sqlResultQualityBar: document.querySelector("#sqlResultQualityBar"),
+  sqlResultPassedBar: document.querySelector("#sqlResultPassedBar"),
+  sqlResultFailedBar: document.querySelector("#sqlResultFailedBar"),
+  sqlResultPassedLabel: document.querySelector("#sqlResultPassedLabel"),
+  sqlResultFailedLabel: document.querySelector("#sqlResultFailedLabel"),
   toast: document.querySelector("#toast"),
   toastText: document.querySelector("#toastText"),
   toastCopyBtn: document.querySelector("#toastCopyBtn"),
@@ -5400,7 +5420,9 @@ function updateEditorButtons() {
   elements.loadEditorBtn.disabled = !hasReport || busy;
   elements.validateEditorBtn.disabled = !hasReport || !hasModel || busy;
   elements.renderSqlBtn.disabled = !hasReport || !hasModel || busy;
-  elements.writeNemoBtn.disabled = !hasReport || !hasModel || !state.renderedSql || busy;
+  elements.writeNemoBtn.disabled = !hasReport || !hasModel || !state.renderedSql?.trim() || busy || state.checkingSqlResult;
+  elements.runSqlPreviewBtn.disabled = !hasReport || !hasModel || busy || state.checkingSqlResult;
+  elements.runSqlPreviewBtn.textContent = state.checkingSqlResult ? "Prüft …" : "Ergebnisvorschau";
   elements.resetEditorBtn.disabled = !hasModel || !state.editorDirty || busy;
   elements.saveDraftBtn.disabled = !hasReport || !hasModel || !state.editorDirty || busy;
   elements.deleteDraftBtn.disabled = !hasReport || !state.currentDraft || busy;
@@ -5695,6 +5717,7 @@ async function renderGeneratedSql() {
   state.generatingSql = true;
   showSqlDetail();
   clearSqlPreview("SQL wird generiert");
+  const previewToken = state.sqlResultToken;
   updateEditorButtons();
   setStatus("rendere");
   try {
@@ -5709,6 +5732,7 @@ async function renderGeneratedSql() {
         paExportFilter: paExportFilterRequested(),
       }),
     });
+    if (previewToken !== state.sqlResultToken) return;
     renderSqlPreview(payload);
     syncPaExportToggle(payload.paExportFilter);
     state.renderedReportLanguage = state.reportLanguage;
@@ -5768,18 +5792,14 @@ async function writeGeneratedSqlToNemo() {
   updateEditorButtons();
   setStatus("speichere");
   try {
-    recalculateEditorModel();
-    const reportModel = await editorModelForReport();
-    const payload = await requestJson(`/api/reports/${encodeURIComponent(reportRef(report))}/write-to-nemo`, {
+    const { reportRef: ref, ...body } = await sqlExecutionBody();
+    const payload = await requestJson(`/api/reports/${encodeURIComponent(ref)}/write-to-nemo`, {
       method: "POST",
-      body: JSON.stringify({
-        configId: state.configId,
-        project: state.project,
-        editorModel: reportModel,
-        overwriteConfirmation: internalName,
-      }),
+      body: JSON.stringify({ ...body, overwriteConfirmation: internalName }),
     });
     setStatus("bereit", "ok");
+    state.reportSqlHash = payload.reportSqlHash;
+    if (state.renderedSqlContext) state.renderedSqlContext.baseSqlHash = payload.reportSqlHash;
     const updatedCount = payload.updatedReports?.length || 1;
     showToast(`${updatedCount} ${updatedCount === 1 ? "Bericht" : "Berichte"} in NEMO aktualisiert`);
   } catch (error) {
@@ -5884,8 +5904,127 @@ function downloadBlob(blob, filename) {
   link.remove();
   URL.revokeObjectURL(url);
 }
+async function sqlExecutionBody() {
+  const context = state.renderedSqlContext;
+  if (!context) throw new Error("Bitte zuerst die SQL-Vorschau erzeugen.");
+  const sql = elements.sqlPreview.value;
+  if (!sql.trim()) throw new Error("Die SQL-Vorschau ist leer.");
+  const normalized = sql.replace(/\r\n?/g, "\n").split("\n").map(line => line.trimEnd()).join("\n").trim();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(normalized));
+  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  return { ...context, sql, expectedSqlHash: hash };
+}
+
+function invalidateSqlResult() {
+  state.sqlResultToken += 1;
+  state.sqlResult = null;
+  state.checkingSqlResult = false;
+  elements.sqlResultMetrics.replaceChildren();
+  elements.sqlResultErrors.replaceChildren();
+  elements.sqlResultQuality.hidden = true;
+  elements.sqlResultLoading.hidden = true;
+  elements.sqlResultContent.hidden = true;
+  elements.sqlResultDialog.setAttribute("aria-busy", "false");
+  elements.sqlResultInfo.textContent = "Vorschau geändert. Ergebnis bitte erneut prüfen.";
+}
+
+async function checkSqlResult() {
+  if (!state.selectedReport || !state.editorModel || state.checkingSqlResult || state.generatingSql) return;
+  if (!state.renderedSqlContext) await renderGeneratedSql();
+  if (!state.renderedSqlContext) return;
+  invalidateSqlResult();
+  const token = state.sqlResultToken;
+  state.checkingSqlResult = true;
+  elements.sqlResultLoading.hidden = false;
+  elements.sqlResultDialog.setAttribute("aria-busy", "true");
+  if (!elements.sqlResultDialog.open) elements.sqlResultDialog.showModal();
+  elements.sqlResultReportName.textContent = state.selectedReport?.displayName || "";
+  elements.sqlResultInfo.textContent = "Ergebnis wird geladen … Der Originalbericht bleibt unverändert.";
+  updateEditorButtons();
+  try {
+    const { reportRef: ref, ...body } = await sqlExecutionBody();
+    if (token !== state.sqlResultToken) return;
+    const payload = await requestJson(`/api/reports/${encodeURIComponent(ref)}/preview-result`, {
+      method: "POST", body: JSON.stringify(body),
+    });
+    if (token !== state.sqlResultToken) return;
+    state.sqlResult = payload.preview;
+    renderSqlResult();
+  } catch (error) {
+    if (token !== state.sqlResultToken) return;
+    elements.sqlResultInfo.textContent = error.message;
+  } finally {
+    if (token === state.sqlResultToken) {
+      state.checkingSqlResult = false;
+      elements.sqlResultLoading.hidden = true;
+      elements.sqlResultContent.hidden = !state.sqlResult;
+      elements.sqlResultDialog.setAttribute("aria-busy", "false");
+      updateEditorButtons();
+    }
+  }
+}
+
+function renderSqlResult() {
+  const result = state.sqlResult;
+  if (!result) return;
+  const number = value => value === null ? "–" : Number(value).toLocaleString("de-DE");
+  elements.sqlResultMetrics.replaceChildren();
+  const failed = result.recordsWithErrors;
+  const passed = failed === null ? null : result.rowCount - failed;
+  for (const [label, count, kind] of [["Datensätze insgesamt", result.rowCount, "total"],
+    ["Ohne Fehler", passed, "passed"], ["Mit mindestens einem Fehler", failed, "failed"],
+    ["Fehlervorkommen", result.errorOccurrences, "occurrences"]]) {
+    const metric = document.createElement("div");
+    metric.className = `metric sql-result-metric ${kind}`;
+    metric.append(textBlock("span", label), textBlock("strong", number(count)));
+    elements.sqlResultMetrics.append(metric);
+  }
+  elements.sqlResultQuality.hidden = failed === null;
+  const passedPercent = result.rowCount && passed !== null ? passed / result.rowCount * 100 : 0;
+  const failedPercent = result.rowCount && failed !== null ? failed / result.rowCount * 100 : 0;
+  const percent = value => value.toLocaleString("de-DE", { maximumFractionDigits: 1 });
+  elements.sqlResultPassedBar.style.width = `${passedPercent}%`;
+  elements.sqlResultFailedBar.style.width = `${failedPercent}%`;
+  elements.sqlResultQualityRate.textContent = result.rowCount ? `${percent(passedPercent)} % ohne Fehler` : "Keine Datensätze";
+  elements.sqlResultPassedLabel.textContent = `${number(passed)} ohne Fehler · ${percent(passedPercent)} %`;
+  elements.sqlResultFailedLabel.textContent = `${number(failed)} mit Fehlern · ${percent(failedPercent)} %`;
+  elements.sqlResultQualityBar.setAttribute("aria-label", `${number(passed)} Datensätze ohne Fehler, ${number(failed)} mit mindestens einem Fehler, insgesamt ${number(result.rowCount)}`);
+  elements.sqlResultInfo.textContent = "Stand der letzten Ausführung. Häufigkeit = Datensätze mit diesem Fehler; ein Datensatz kann mehrere Fehler enthalten.";
+  elements.sqlResultErrors.replaceChildren();
+  if (!result.errorColumn) {
+    elements.sqlResultErrors.append(textBlock("p", "Keine Fehlerspalte (RULEDESCRIPTION oder DEFICIENCY_DESCRIPTION) im Ergebnis vorhanden.", "meta-line"));
+  } else if (!result.errorSummary.length) {
+    elements.sqlResultErrors.append(textBlock("p", result.rowCount ? "Keine Fehler im Ergebnis." : "Der Bericht liefert keine Datensätze.", "meta-line"));
+  }
+  for (const item of result.errorSummary) {
+    const row = document.createElement("div");
+    row.className = "sql-error-row";
+    const track = document.createElement("div");
+    track.className = "sql-error-track";
+    const bar = document.createElement("div");
+    bar.className = "sql-error-bar";
+    bar.style.width = `${item.percent}%`;
+    track.title = `${number(item.count)} von ${number(result.rowCount)} Datensätzen`;
+    track.append(bar);
+    row.append(textBlock("span", item.message, "sql-error-label"), track,
+      textBlock("span", `${number(item.count)} · ${number(item.percent)} %`, "sql-error-count"));
+    elements.sqlResultErrors.append(row);
+  }
+
+}
+
 function renderSqlPreview(payload) {
   state.renderedSql = payload.sql || "";
+  state.renderedSqlContext = {
+    configId: payload.configId,
+    project: payload.project,
+    reportRef: reportRef(payload.report),
+    editorModel: JSON.parse(JSON.stringify(payload.editorModel)),
+    baseSqlHash: payload.sourceSqlHash,
+    expectedSqlHash: payload.sqlHash,
+    paExportFilter: payload.paExportFilter?.enabled ?? null,
+  };
+  elements.runSqlPreviewBtn.disabled = !state.renderedSql;
   const previewSql = payload.sql || payload.generatedChecksSql || "";
   elements.sqlPreview.value = previewSql || "Kein SQL generiert";
   elements.sqlPreviewInfo.textContent = payload.changed ? "Vollständiges SQL generiert" : "Keine Änderung";
@@ -5894,6 +6033,9 @@ function renderSqlPreview(payload) {
 
 function clearSqlPreview(message = "Keine SQL-Vorschau") {
   state.renderedSql = null;
+  state.renderedSqlContext = null;
+  invalidateSqlResult();
+  elements.runSqlPreviewBtn.disabled = !state.selectedReport || !state.editorModel || state.generatingSql;
   state.renderedReportLanguage = null;
   if (elements.sqlPreview) {
     elements.sqlPreview.value = message;
@@ -6082,6 +6224,13 @@ function bindEvents() {
    elements.loadEditorBtn.addEventListener("click", loadEditorModel);
    elements.validateEditorBtn.addEventListener("click", validateEditedModel);
    elements.renderSqlBtn.addEventListener("click", renderGeneratedSql);
+   elements.runSqlPreviewBtn.addEventListener("click", checkSqlResult);
+   elements.closeSqlResultBtn.addEventListener("click", () => elements.sqlResultDialog.close());
+   elements.sqlPreview.addEventListener("input", () => {
+     state.renderedSql = elements.sqlPreview.value;
+     invalidateSqlResult();
+     updateEditorButtons();
+   });
    if (elements.paExportFilterToggle) elements.paExportFilterToggle.addEventListener("change", onPaExportToggleChanged);
    elements.writeNemoBtn.addEventListener("click", writeGeneratedSqlToNemo);
    elements.resetEditorBtn.addEventListener("click", resetEditorModel);

@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -88,8 +89,9 @@ class ReportExportTest(unittest.TestCase):
             )
 
     def test_environment_variables_are_expanded_in_output_path(self) -> None:
+        raw_path = "%NEMO_EXPORT_TEST%/exports" if os.name == "nt" else "$NEMO_EXPORT_TEST/exports"
         with patch.dict("os.environ", {"NEMO_EXPORT_TEST": str(Path.home())}):
-            path = resolve_export_directory("%NEMO_EXPORT_TEST%/exports")
+            path = resolve_export_directory(raw_path)
 
         self.assertEqual((Path.home() / "exports").resolve(), path)
 

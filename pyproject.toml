@@ -28,7 +28,17 @@ dependencies = [
   "requests>=2.32",
   "nemo_library==1.6.63",
   "pandas",
+  "openpyxl>=3.1,<4",
+  "reportlab>=4.2,<5",
 ]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [project.urls]
 Homepage = "https://github.com/mtemmers/nemo_deficiencies"
